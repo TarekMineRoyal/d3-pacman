@@ -105,8 +105,6 @@ function checkCollision(ghost) {
     const overlap = (ghost.gridX === pacman.gridX && ghost.gridY === pacman.gridY);
 
     // 2. Tunneling (Swap) Check
-    // Occurs if they passed through each other in the same tick updates
-    // Logic: Ghost is where Pac-Man WAS, and Pac-Man is where Ghost WAS.
     const swap = (ghost.gridX === pacman.prevGridX && ghost.gridY === pacman.prevGridY &&
         ghost.prevGridX === pacman.gridX && ghost.prevGridY === pacman.gridY);
 
@@ -177,7 +175,6 @@ const timer = d3.interval(() => {
         }
 
         // 2. EXITING (Scripted Path)
-        // We move them at a standard rate to look natural
         if (ghost.state === 'EXITING') {
             if (tick % 5 === 0) {
                 ghost.moveExiting(5 * GAME_SPEED);
@@ -195,7 +192,6 @@ const timer = d3.interval(() => {
 
             if (ghost.isEaten) {
                 ghost.moveTowardsHome(duration);
-
                 // Revival Check near door (9, 8)
                 if (Math.abs(ghost.gridX - 9) <= 1 && Math.abs(ghost.gridY - 8) <= 1) {
                     ghost.setEaten(false);
@@ -203,8 +199,25 @@ const timer = d3.interval(() => {
             }
             else if (ghost.isScared) {
                 ghost.moveAwayFrom(pacman.gridX, pacman.gridY, duration);
-            } else {
-                ghost.moveRandom(duration);
+            }
+            else {
+                // --- PERSONALITY AI ---
+                if (ghost.baseColor === 'red') {
+                    // BLINKY: Direct Chase
+                    ghost.moveToTarget(pacman.gridX, pacman.gridY, duration);
+                }
+                else if (ghost.baseColor === 'pink') {
+                    // PINKY: Ambush (4 tiles ahead)
+                    const offset = 4;
+                    // We use 'currentDirection' from Pac-Man's state
+                    const targetX = pacman.gridX + (currentDirection.x * offset);
+                    const targetY = pacman.gridY + (currentDirection.y * offset);
+                    ghost.moveToTarget(targetX, targetY, duration);
+                }
+                else {
+                    // INKY & CLYDE: Random wandering (for now)
+                    ghost.moveRandom(duration);
+                }
             }
 
             checkCollision(ghost);
@@ -213,7 +226,6 @@ const timer = d3.interval(() => {
 
     // D. Global Collision (Safety Check)
     ghosts.forEach(ghost => {
-        // Only check collision if ghost is fully active in the maze
         if (ghost.state === 'ACTIVE') {
             checkCollision(ghost);
         }

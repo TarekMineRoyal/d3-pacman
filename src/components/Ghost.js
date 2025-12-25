@@ -140,20 +140,26 @@ export class Ghost {
         this.bodyParts.select('rect').attr('fill', color);
     }
 
-    // --- STANDARD AI MOVEMENT ---
+    // --- SMART AI MOVEMENT ---
 
     moveTowardsHome(duration) {
-        // Target the door at (9, 9) - simplified return point
-        const targetX = 9;
-        const targetY = 9;
+        // Reuse the generic target function
+        this.moveToTarget(9, 9, duration);
+    }
 
+    /**
+     * The Main AI Function.
+     * Evaluates all valid moves and picks the one that minimizes distance to target.
+     */
+    moveToTarget(targetX, targetY, duration) {
         const possibleMoves = this.getValidMoves();
         if (possibleMoves.length === 0) return;
 
         possibleMoves.sort((a, b) => {
+            // Euclidean distance
             const distA = Math.hypot((this.gridX + a.x) - targetX, (this.gridY + a.y) - targetY);
             const distB = Math.hypot((this.gridX + b.x) - targetX, (this.gridY + b.y) - targetY);
-            return distA - distB;
+            return distA - distB; // Shortest distance first
         });
 
         this.executeMove(possibleMoves[0], duration);
@@ -162,20 +168,16 @@ export class Ghost {
     moveAwayFrom(targetX, targetY, duration) {
         const possibleMoves = this.getValidMoves();
         if (possibleMoves.length === 0) return;
+
+        // Note: For "Fleeing", we might want to improve this later to avoid dead ends,
+        // but for now, maximizing immediate distance is the standard simple AI.
         possibleMoves.sort((a, b) => {
             const distA = Math.hypot((this.gridX + a.x) - targetX, (this.gridY + a.y) - targetY);
             const distB = Math.hypot((this.gridX + b.x) - targetX, (this.gridY + b.y) - targetY);
-            return distB - distA;
+            return distB - distA; // Longest distance first
         });
-        this.executeMove(possibleMoves[0], duration);
-    }
 
-    moveRandom(duration) {
-        const possibleMoves = this.getValidMoves();
-        if (possibleMoves.length > 0) {
-            const randomMove = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
-            this.executeMove(randomMove, duration);
-        }
+        this.executeMove(possibleMoves[0], duration);
     }
 
     getValidMoves() {
