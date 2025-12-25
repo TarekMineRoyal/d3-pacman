@@ -9,6 +9,26 @@
     <link rel="stylesheet" href="css/style.css">
 
     <script src="https://d3js.org/d3.v7.min.js"></script>
+
+    <style>
+        /* Simple styling for the restart button */
+        #restart-btn {
+            background-color: #ffcc00;
+            /* Pac-Man Yellow */
+            color: black;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-left: 20px;
+            border-radius: 5px;
+        }
+
+        #restart-btn:hover {
+            background-color: #e6b800;
+        }
+    </style>
 </head>
 
 <body>
@@ -17,10 +37,13 @@
         <h1>D3 Pac-Man</h1>
         <div id="game-container">
         </div>
+
         <div id="score-board">
             <span>Score: <span id="score-value">0</span></span>
             <span style="margin-left: 20px;">Lives: <span id="lives-value">3</span></span>
+            <button id="restart-btn">Restart</button>
         </div>
+
         <p class="instructions">Use Arrow Keys to Move</p>
     </div>
 

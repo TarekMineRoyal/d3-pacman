@@ -40,10 +40,15 @@ let tick = 0;
 let timer = null;
 let scaredTimer = 0;
 let currentDirection = { x: 0, y: 0, angle: 90 };
-let isPaused = false; // NEW: Prevents double-death triggers
+let isPaused = false;
 
 const scoreSpan = document.getElementById('score-value');
 const livesSpan = document.getElementById('lives-value');
+
+// --- NEW: Restart Button Logic ---
+document.getElementById('restart-btn').addEventListener('click', () => {
+    window.location.reload();
+});
 
 // Count total dots to win
 let totalDots = 0;
@@ -91,12 +96,10 @@ function handleEat(gridX, gridY) {
     }
 }
 
-// NEW: Handle Life Loss Sequence
 function handleLifeLost() {
-    // FIX: If already paused/dying, ignore subsequent triggers
     if (isPaused) return;
 
-    isPaused = true; // Lock the game state immediately
+    isPaused = true;
     if (timer) timer.stop();
 
     lives--;
@@ -105,18 +108,14 @@ function handleLifeLost() {
     if (lives === 0) {
         setTimeout(() => alert("Game Over! Final Score: " + score), 100);
     } else {
-        // Soft Reset
         setTimeout(() => {
-            // 1. Reset Actors
             pacman.reset();
             ghosts.forEach(g => g.reset());
 
-            // 2. Reset Loop State
             tick = 0;
             scaredTimer = 0;
             currentDirection = { x: 0, y: 0, angle: 90 };
 
-            // 3. Unlock and Restart
             isPaused = false;
             startGameLoop();
         }, 2000);
@@ -124,7 +123,6 @@ function handleLifeLost() {
 }
 
 function checkCollision(ghost) {
-    // FIX: Don't check collision if we are already in the death sequence
     if (isPaused) return;
 
     const overlap = (ghost.gridX === pacman.gridX && ghost.gridY === pacman.gridY);
@@ -144,11 +142,9 @@ function checkCollision(ghost) {
 
 // --- 4. Game Loop ---
 function startGameLoop() {
-    // Safety: ensure no old timers are running
     if (timer) timer.stop();
 
     timer = d3.interval(() => {
-        // Double check pause state at start of tick
         if (isPaused) return;
 
         tick++;
@@ -167,7 +163,6 @@ function startGameLoop() {
         // B. Pac-Man Logic (Every 4 ticks)
         if (tick % 4 === 0) {
 
-            // --- WRAPPING LOGIC ---
             if (pacman.gridX < 0) {
                 pacman.gridX = NUM_COLS - 1;
                 pacman.x = (pacman.gridX + 0.5) * CELL_SIZE;
@@ -187,11 +182,9 @@ function startGameLoop() {
             let isTunnel = (nextY === 14 && (nextX < 0 || nextX >= NUM_COLS));
             let nextCell = !isTunnel ? level1[nextY][nextX] : CELL_TYPES.EMPTY;
 
-            // 1. Try to turn
             if (isTunnel || (nextCell !== CELL_TYPES.WALL && nextCell !== CELL_TYPES.GHOST_HOUSE)) {
                 currentDirection = nextDirection;
             } else {
-                // 2. If turn failed, keep going straight
                 nextX = pacman.gridX + currentDirection.x;
                 nextY = pacman.gridY + currentDirection.y;
 
@@ -199,7 +192,6 @@ function startGameLoop() {
                 nextCell = !isTunnel ? level1[nextY][nextX] : CELL_TYPES.EMPTY;
             }
 
-            // 3. Move if valid
             if (isTunnel || (nextCell !== CELL_TYPES.WALL && nextCell !== CELL_TYPES.GHOST_HOUSE)) {
                 pacman.move(nextX, nextY, currentDirection.angle, 4 * GAME_SPEED);
                 handleEat(nextX, nextY);
@@ -208,9 +200,8 @@ function startGameLoop() {
 
         // C. Ghost Logic
         ghosts.forEach(ghost => {
-            if (isPaused) return; // Stop processing ghosts if we died mid-loop
+            if (isPaused) return;
 
-            // 1. AT HOME
             if (ghost.state === 'AT_HOME') {
                 ghost.bounce(tick);
                 if (tick >= ghost.releaseTick) {
@@ -219,7 +210,6 @@ function startGameLoop() {
                 return;
             }
 
-            // 2. EXITING
             if (ghost.state === 'EXITING') {
                 if (tick % 5 === 0) {
                     ghost.moveExiting(5 * GAME_SPEED);
@@ -227,7 +217,6 @@ function startGameLoop() {
                 return;
             }
 
-            // 3. ACTIVE
             let moveRate = 5;
             if (ghost.isEaten) moveRate = 2;
             else if (ghost.isScared) moveRate = 8;
@@ -235,7 +224,6 @@ function startGameLoop() {
             if (tick % moveRate === 0) {
                 const duration = moveRate * GAME_SPEED;
 
-                // --- GHOST WRAPPING ---
                 if (ghost.gridX < 0) {
                     ghost.gridX = NUM_COLS - 1;
                     ghost.x = (ghost.gridX + 0.5) * CELL_SIZE;
