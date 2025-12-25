@@ -36,3 +36,13 @@ export const ACTORS = {
 
 // --- Game Settings ---
 export const GAME_SPEED = 150; // Milliseconds per tick (lower is faster)
+
+// --- Directions ---
+// We map these to angles for rotation: 0=Up, 90=Right, 180=Down, 270=Left
+export const DIRECTIONS = {
+    UP: { x: 0, y: -1, angle: 0 },
+    DOWN: { x: 0, y: 1, angle: 180 },
+    LEFT: { x: -1, y: 0, angle: 270 },
+    RIGHT: { x: 1, y: 0, angle: 90 },
+    NONE: { x: 0, y: 0, angle: 90 } // Default state
+};

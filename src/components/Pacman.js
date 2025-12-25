@@ -17,6 +17,9 @@ export class Pacman {
         this.rotation = 90; // Default facing Right (90 degrees)
         this.mouthRadius = 0.2; // How wide the mouth opens (0 to 1)
 
+        this.gridX = startGridX;
+        this.gridY = startGridY;
+
         // 1. Define the Shape Generator (The Arc)
         // D3 Arcs start at 12 o'clock (0 radians). 
         // We draw him facing UP, then rotate the whole group to change direction.
@@ -70,5 +73,21 @@ export class Pacman {
 
         // Update the path data "d" attribute
         this.path.attr('d', this.arcGenerator);
+    }
+
+    /**
+   * Moves Pac-Man to a specific grid tile.
+   */
+    move(newGridX, newGridY, angle) {
+        this.gridX = newGridX;
+        this.gridY = newGridY;
+
+        // Call the visual update we wrote earlier
+        this.updatePosition(newGridX, newGridY, angle);
+
+        // Animate mouth (Simple toggle for now)
+        // We can make this smoother later
+        const mouthState = (this.gridX + this.gridY) % 2 === 0 ? 0.2 : 0.05;
+        this.updateMouth(mouthState);
     }
 }

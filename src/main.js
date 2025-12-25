@@ -1,28 +1,44 @@
 import { drawGrid } from './components/Grid.js';
-import { Pacman } from './components/Pacman.js'; // Import the Class
+import { Pacman } from './components/Pacman.js';
 import { level1 } from './data/level1.js';
-import { CELL_SIZE } from './constants.js';
+import { CELL_SIZE, CELL_TYPES, GAME_SPEED } from './constants.js';
+import { InputHandler } from './utils/Input.js'; // Import Input
 
-// 1. Calculate Dimensions
+// ... (Dimensions and SVG setup remain the same) ...
 const NUM_ROWS = level1.length;
 const NUM_COLS = level1[0].length;
-
 const WIDTH = NUM_COLS * CELL_SIZE;
 const HEIGHT = NUM_ROWS * CELL_SIZE;
 
-// 2. Setup SVG Container
 const svg = d3.select('#game-container')
     .append('svg')
     .attr('width', WIDTH)
     .attr('height', HEIGHT)
     .style('background-color', 'black');
 
-// 3. Render the Static Board
-console.log('Initializing D3 Pac-Man...');
 drawGrid(svg, level1);
 
-// 4. Spawn the Player
-// Grid coordinates (Col: 9, Row: 16) places him just below the ghost house.
+// Spawn Pac-Man
 const pacman = new Pacman(svg, 9, 16);
+const input = new InputHandler(); // Initialize Input
 
-console.log('Pac-Man Spawned at 9, 16');
+// --- The Game Loop ---
+// d3.interval runs the callback every GAME_SPEED milliseconds
+const timer = d3.interval(() => {
+
+    const direction = input.getDirection();
+
+    // Basic Movement Logic (No Collision yet)
+    // We calculate the POTENTIAL new position
+    const nextX = pacman.gridX + direction.x;
+    const nextY = pacman.gridY + direction.y;
+
+    // IMPORTANT: Collision Check
+    // We only move if the next cell is NOT a wall
+    const nextCell = level1[nextY][nextX];
+
+    if (nextCell !== CELL_TYPES.WALL && nextCell !== CELL_TYPES.GHOST_HOUSE) {
+        pacman.move(nextX, nextY, direction.angle);
+    }
+
+}, GAME_SPEED);
