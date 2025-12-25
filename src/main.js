@@ -25,8 +25,10 @@ const pacman = new Pacman(svg, 9, 16);
 
 // Spawn Logic
 // Constructor: (svg, x, y, color, releaseTick)
+// Coordinates: (9, 8) is Outside (Blinky's spot)
+// Coordinates: (9, 10), (8, 10), (10, 10) are INSIDE the Ghost House
 const ghosts = [
-    new Ghost(svg, 9, 8, 'red', 0),        // Blinky (Already Out)
+    new Ghost(svg, 9, 8, 'red', 0),         // Blinky (Starts Active)
     new Ghost(svg, 9, 10, 'pink', 100),     // Pinky (Center)
     new Ghost(svg, 8, 10, 'cyan', 300),     // Inky (Left)
     new Ghost(svg, 10, 10, 'orange', 500)   // Clyde (Right)
@@ -81,15 +83,14 @@ function handleEat(gridX, gridY) {
 
         scoreSpan.innerText = score;
 
-        // NEW: Win Condition Check
+        // Win Condition Check
         totalDots--;
 
         if (totalDots === 0) {
             timer.stop();
-            // Use setTimeout so the final dot disappears visually before the alert
             setTimeout(() => {
                 alert(`YOU WIN! Perfect Score: ${score}`);
-                // Optional: location.reload(); // Reloads page to restart
+                // Optional: location.reload(); 
             }, 10);
         }
     }
@@ -97,7 +98,6 @@ function handleEat(gridX, gridY) {
 
 /**
  * Checks if Pac-Man and a specific Ghost are occupying the same tile.
- * Handles both "Game Over" and "Eat Ghost" scenarios.
  */
 function checkCollision(ghost) {
     if (ghost.gridX === pacman.gridX && ghost.gridY === pacman.gridY) {
@@ -105,7 +105,6 @@ function checkCollision(ghost) {
             // CASE A: Eat the Ghost
             score += 200;
             scoreSpan.innerText = score;
-            // NEW: Don't respawn instantly. Set to "Eyes Mode".
             ghost.setEaten(true);
         } else if (!ghost.isScared && !ghost.isEaten) {
             // CASE B: Game Over (Only if ghost is dangerous)
@@ -122,30 +121,33 @@ const timer = d3.interval(() => {
     // A. Manage Scared Mode
     if (scaredTimer > 0) {
         scaredTimer--;
-        // ... (Flash logic same as before) ...
+        if (scaredTimer <= GAME_CONSTANTS.FLASH_THRESHOLD && (scaredTimer % 10 === 0)) {
+            ghosts.forEach(g => g.toggleFlash());
+        }
         if (scaredTimer === 0) {
             ghosts.forEach(g => g.setScared(false));
         }
     }
 
-    // B. Pac-Man Logic (4 ticks)
+    // B. Pac-Man Logic (Every 4 ticks)
     if (tick % 4 === 0) {
-        // ... (Pacman Logic same as before) ...
-        // ...
         const nextDirection = input.getDirection();
-        // ... (Shortened for brevity - keep your existing movement code) ...
+
         let nextX = pacman.gridX + nextDirection.x;
         let nextY = pacman.gridY + nextDirection.y;
         let nextCell = level1[nextY][nextX];
 
+        // 1. Try to turn
         if (nextCell !== CELL_TYPES.WALL && nextCell !== CELL_TYPES.GHOST_HOUSE) {
             currentDirection = nextDirection;
         } else {
+            // 2. If turn failed, keep going straight
             nextX = pacman.gridX + currentDirection.x;
             nextY = pacman.gridY + currentDirection.y;
             nextCell = level1[nextY][nextX];
         }
 
+        // 3. Move if valid
         if (nextCell !== CELL_TYPES.WALL && nextCell !== CELL_TYPES.GHOST_HOUSE) {
             pacman.move(nextX, nextY, currentDirection.angle, 4 * GAME_SPEED);
             handleEat(nextX, nextY);
@@ -155,22 +157,28 @@ const timer = d3.interval(() => {
     // C. Ghost Logic
     ghosts.forEach(ghost => {
 
-        // 1. CHECK RELEASE
-        if (ghost.isInHouse) {
-            // Animation: Bounce while waiting
+        // 1. AT HOME (Bouncing)
+        if (ghost.state === 'AT_HOME') {
             ghost.bounce(tick);
-
-            // Release: If tick reached release time, exit!
             if (tick >= ghost.releaseTick) {
-                ghost.exitHouse();
+                ghost.startExit();
             }
-            return; // Skip the rest of the movement logic
+            return;
         }
 
-        // 2. Normal Ghost AI (Only runs if NOT in house)
+        // 2. EXITING (Scripted Path)
+        // We move them at a standard rate to look natural
+        if (ghost.state === 'EXITING') {
+            if (tick % 5 === 0) {
+                ghost.moveExiting(5 * GAME_SPEED);
+            }
+            return;
+        }
+
+        // 3. ACTIVE (Standard AI)
         let moveRate = 5;
-        if (ghost.isEaten) moveRate = 2;
-        else if (ghost.isScared) moveRate = 8;
+        if (ghost.isEaten) moveRate = 2; // Fast eyes
+        else if (ghost.isScared) moveRate = 8; // Slow scared
 
         if (tick % moveRate === 0) {
             const duration = moveRate * GAME_SPEED;
@@ -178,11 +186,9 @@ const timer = d3.interval(() => {
             if (ghost.isEaten) {
                 ghost.moveTowardsHome(duration);
 
-                // REVIVAL LOGIC
-                // Check if near the door (9, 8)
-                if (Math.abs(ghost.gridX - 10) <= 1 && Math.abs(ghost.gridY - 8) <= 1) {
+                // Revival Check near door (9, 8)
+                if (Math.abs(ghost.gridX - 9) <= 1 && Math.abs(ghost.gridY - 8) <= 1) {
                     ghost.setEaten(false);
-                    // Optional: Send them back inside to (9, 10) if you want them to queue up
                 }
             }
             else if (ghost.isScared) {
@@ -195,9 +201,12 @@ const timer = d3.interval(() => {
         }
     });
 
-    // D. Global Collision
+    // D. Global Collision (Safety Check)
     ghosts.forEach(ghost => {
-        if (!ghost.isInHouse) checkCollision(ghost);
+        // Only check collision if ghost is fully active in the maze
+        if (ghost.state === 'ACTIVE') {
+            checkCollision(ghost);
+        }
     });
 
 }, GAME_SPEED);

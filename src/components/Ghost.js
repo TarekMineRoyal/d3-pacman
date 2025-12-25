@@ -14,12 +14,16 @@ export class Ghost {
         // Properties
         this.baseColor = color;
         this.currentColor = color;
-        this.releaseTick = releaseTick; // When to leave the house
+        this.releaseTick = releaseTick;
 
-        // States
+        // --- STATE MACHINE ---
+        // 'AT_HOME' = Bouncing inside the box, waiting for releaseTick
+        // 'EXITING' = Navigating from inside the box to the door (9, 8)
+        // 'ACTIVE'  = Roaming the maze (Chase/Scatter/Random)
+        this.state = (releaseTick > 0) ? 'AT_HOME' : 'ACTIVE';
+
         this.isScared = false;
         this.isEaten = false;
-        this.isInHouse = (releaseTick > 0); // If releaseTick is 0, start active (Blinky)
 
         this.currentDir = DIRECTIONS.RIGHT;
 
@@ -28,6 +32,11 @@ export class Ghost {
         this.y = (startGridY + 0.5) * CELL_SIZE;
 
         this.render();
+    }
+
+    // Helper for legacy checks or external logic
+    get isInHouse() {
+        return this.state === 'AT_HOME';
     }
 
     render() {
@@ -49,30 +58,56 @@ export class Ghost {
 
     // --- ACTIONS ---
 
-    // NEW: Idle animation while waiting
+    // Idle animation while waiting
     bounce(tick) {
+        if (this.state !== 'AT_HOME') return;
         // Simple Sine wave bounce (Up/Down by 3 pixels)
         const bounceY = Math.sin(tick * 0.5) * 3;
         this.group.attr('transform', `translate(${this.x}, ${this.y + bounceY})`);
     }
 
-    // Leave the house and enter the maze
-    exitHouse() {
-        this.isInHouse = false;
-
-        // Move to the new "Door" location (Row 8)
-        this.gridX = 9;
-        this.gridY = 9;
-        this.currentDir = DIRECTIONS.LEFT;
-
-        this.x = (this.gridX + 0.5) * CELL_SIZE;
-        this.y = (this.gridY + 0.5) * CELL_SIZE;
-        this.group.attr('transform', `translate(${this.x}, ${this.y})`);
+    // Trigger the exit sequence
+    startExit() {
+        if (this.state === 'AT_HOME') {
+            this.state = 'EXITING';
+            // Snap pixel position to grid to ensure clean movement start
+            this.x = (this.gridX + 0.5) * CELL_SIZE;
+            this.y = (this.gridY + 0.5) * CELL_SIZE;
+            this.group.attr('transform', `translate(${this.x}, ${this.y})`);
+        }
     }
 
-    // ... (setScared, setEaten, toggleFlash, updateColor remain the same) ...
+    // --- STATES & MOVEMENT ---
+
+    /**
+     * Handles the hard-coded path from the ghost house to the door (9, 8).
+     * Path: Center Row (y=10) -> Center Column (x=9) -> Door (9,8)
+     */
+    moveExiting(duration) {
+        let nextDir = DIRECTIONS.NONE;
+
+        // 1. If not at Center Column (9), move laterally
+        if (this.gridX < 9) nextDir = DIRECTIONS.RIGHT;
+        else if (this.gridX > 9) nextDir = DIRECTIONS.LEFT;
+
+        // 2. If at Center Column (9), but below Door (8), move UP
+        else if (this.gridY > 8) nextDir = DIRECTIONS.UP;
+
+        // 3. If at Door (9, 8) or higher, we are OUT
+        else {
+            this.state = 'ACTIVE';
+            this.currentDir = DIRECTIONS.LEFT; // Standard entry direction
+            // Force an immediate normal move or just wait for next tick
+            return;
+        }
+
+        if (nextDir !== DIRECTIONS.NONE) {
+            this.executeMove(nextDir, duration);
+        }
+    }
+
     setScared(scared) {
-        if (this.isEaten || this.isInHouse) return; // Can't scare if safe in house
+        if (this.isEaten || this.state === 'AT_HOME' || this.state === 'EXITING') return;
         this.isScared = scared;
         this.updateColor(scared ? COLORS.SCARED_GHOST : this.baseColor);
     }
@@ -101,11 +136,10 @@ export class Ghost {
         this.bodyParts.select('rect').attr('fill', color);
     }
 
-    // --- MOVEMENT ---
-    // (Your existing movement methods remain the same)
+    // --- STANDARD AI MOVEMENT ---
 
     moveTowardsHome(duration) {
-        // Target the door at (9, 9)
+        // Target the door at (9, 9) - simplified return point
         const targetX = 9;
         const targetY = 9;
 
@@ -141,8 +175,6 @@ export class Ghost {
     }
 
     getValidMoves() {
-        // ... (Your existing getValidMoves code) ...
-        // Note: If you have "GHOST_HOUSE" tiles, make sure they are traversable
         const possibleMoves = [];
         Object.values(DIRECTIONS).forEach(dir => {
             if (dir === DIRECTIONS.NONE) return;
@@ -150,13 +182,17 @@ export class Ghost {
             const nextY = this.gridY + dir.y;
 
             const type = level1[nextY][nextX];
-            // Allow moving through Empty, Dots, Pellets, and Ghost House
+
+            // Standard Rule: Cannot hit walls
             if (type !== CELL_TYPES.WALL) {
+                // Ghost Logic: Don't reverse direction 180 degrees (unless stuck)
                 if (dir.x !== -this.currentDir.x || dir.y !== -this.currentDir.y) {
                     possibleMoves.push(dir);
                 }
             }
         });
+
+        // Dead End handling: Allow reverse if no other option
         if (possibleMoves.length === 0) {
             Object.values(DIRECTIONS).forEach(dir => {
                 if (dir === DIRECTIONS.NONE) return;
