@@ -21,12 +21,15 @@ const svg = d3.select('#game-container')
 drawGrid(svg, level1);
 
 // Spawn Actors
-const pacman = new Pacman(svg, 9, 16); // Start below ghost house
+const pacman = new Pacman(svg, 9, 16);
+
+// Spawn Logic
+// Constructor: (svg, x, y, color, releaseTick)
 const ghosts = [
-    new Ghost(svg, 1, 1, 'red'),      // Blinky (Top Left)
-    new Ghost(svg, 17, 1, 'pink'),    // Pinky (Top Right)
-    new Ghost(svg, 1, 18, 'cyan'),    // Inky (Bottom Left)
-    new Ghost(svg, 17, 18, 'orange')  // Clyde (Bottom Right)
+    new Ghost(svg, 9, 8, 'red', 0),        // Blinky (Already Out)
+    new Ghost(svg, 9, 10, 'pink', 100),     // Pinky (Center)
+    new Ghost(svg, 8, 10, 'cyan', 300),     // Inky (Left)
+    new Ghost(svg, 10, 10, 'orange', 500)   // Clyde (Right)
 ];
 
 const input = new InputHandler();
@@ -98,43 +101,39 @@ function handleEat(gridX, gridY) {
  */
 function checkCollision(ghost) {
     if (ghost.gridX === pacman.gridX && ghost.gridY === pacman.gridY) {
-        if (ghost.isScared) {
-            // CASE A: Pac-Man eats the Ghost
+        if (ghost.isScared && !ghost.isEaten) {
+            // CASE A: Eat the Ghost
             score += 200;
             scoreSpan.innerText = score;
-            ghost.respawn();
-        } else {
-            // CASE B: Ghost eats Pac-Man
+            // NEW: Don't respawn instantly. Set to "Eyes Mode".
+            ghost.setEaten(true);
+        } else if (!ghost.isScared && !ghost.isEaten) {
+            // CASE B: Game Over (Only if ghost is dangerous)
             timer.stop();
-            // Small timeout to allow the render to finish before alerting
             setTimeout(() => alert("Game Over! Final Score: " + score), 10);
         }
     }
 }
 
-// --- 4. The Game Loop ---
+// --- Game Loop ---
 const timer = d3.interval(() => {
     tick++;
 
-    // A. Manage Scared Mode Timer (Global Timer)
+    // A. Manage Scared Mode
     if (scaredTimer > 0) {
         scaredTimer--;
-
-        // Flash white logic
-        if (scaredTimer < GAME_CONSTANTS.FLASH_THRESHOLD && scaredTimer % 10 === 0) {
-            ghosts.forEach(g => g.toggleFlash());
-        }
-
-        // Timer Expired: Reset ALL ghosts
+        // ... (Flash logic same as before) ...
         if (scaredTimer === 0) {
             ghosts.forEach(g => g.setScared(false));
         }
     }
 
-    // B. Pac-Man Logic (Every 4 ticks)
+    // B. Pac-Man Logic (4 ticks)
     if (tick % 4 === 0) {
-        // ... (Your existing Pac-Man Input/Move logic) ...
+        // ... (Pacman Logic same as before) ...
+        // ...
         const nextDirection = input.getDirection();
+        // ... (Shortened for brevity - keep your existing movement code) ...
         let nextX = pacman.gridX + nextDirection.x;
         let nextY = pacman.gridY + nextDirection.y;
         let nextCell = level1[nextY][nextX];
@@ -154,25 +153,51 @@ const timer = d3.interval(() => {
     }
 
     // C. Ghost Logic
-    const ghostTickRate = (scaredTimer > 0) ? 8 : 5;
+    ghosts.forEach(ghost => {
 
-    if (tick % ghostTickRate === 0) {
-        ghosts.forEach(ghost => {
-            // NEW: Pass the duration!
-            // Normal: 200ms, Scared: 320ms
-            const duration = ghostTickRate * GAME_SPEED;
+        // 1. CHECK RELEASE
+        if (ghost.isInHouse) {
+            // Animation: Bounce while waiting
+            ghost.bounce(tick);
 
-            if (ghost.isScared) {
+            // Release: If tick reached release time, exit!
+            if (tick >= ghost.releaseTick) {
+                ghost.exitHouse();
+            }
+            return; // Skip the rest of the movement logic
+        }
+
+        // 2. Normal Ghost AI (Only runs if NOT in house)
+        let moveRate = 5;
+        if (ghost.isEaten) moveRate = 2;
+        else if (ghost.isScared) moveRate = 8;
+
+        if (tick % moveRate === 0) {
+            const duration = moveRate * GAME_SPEED;
+
+            if (ghost.isEaten) {
+                ghost.moveTowardsHome(duration);
+
+                // REVIVAL LOGIC
+                // Check if near the door (9, 8)
+                if (Math.abs(ghost.gridX - 10) <= 1 && Math.abs(ghost.gridY - 8) <= 1) {
+                    ghost.setEaten(false);
+                    // Optional: Send them back inside to (9, 10) if you want them to queue up
+                }
+            }
+            else if (ghost.isScared) {
                 ghost.moveAwayFrom(pacman.gridX, pacman.gridY, duration);
             } else {
                 ghost.moveRandom(duration);
             }
 
             checkCollision(ghost);
-        });
-    }
+        }
+    });
 
-    // D. Global Collision Check
-    ghosts.forEach(ghost => checkCollision(ghost));
+    // D. Global Collision
+    ghosts.forEach(ghost => {
+        if (!ghost.isInHouse) checkCollision(ghost);
+    });
 
 }, GAME_SPEED);
