@@ -9,7 +9,7 @@ export class Pacman {
     constructor(svg, startGridX, startGridY) {
         this.svg = svg;
 
-        // NEW: Remember spawn location for resets
+        // Remember spawn location for resets
         this.startGridX = startGridX;
         this.startGridY = startGridY;
 
@@ -55,7 +55,27 @@ export class Pacman {
         this.path.attr('d', this.arcGenerator);
     }
 
-    // --- NEW: Reset for Lives System ---
+    // --- NEW: Death Animation ---
+    die() {
+        // Stop any movement transitions
+        this.group.interrupt();
+
+        // Animate mouth opening until it disappears (implosion)
+        // Transition from current openness (approx 0.2) to 1.0 (full circle gone)
+        this.path.transition()
+            .duration(1500) // Take 1.5 seconds
+            .attrTween('d', () => {
+                const interpolator = d3.interpolate(0.2, 1); // 0.2pi to 1pi
+                return (t) => {
+                    this.updateMouth(interpolator(t));
+                    return this.path.attr('d');
+                };
+            })
+            .on('end', () => {
+                this.path.attr('opacity', 0); // Hide completely at end
+            });
+    }
+
     reset() {
         // 1. Reset Data
         this.gridX = this.startGridX;
@@ -73,8 +93,9 @@ export class Pacman {
         this.group.interrupt()
             .attr('transform', `translate(${this.x}, ${this.y}) rotate(${this.rotation})`);
 
-        // Reset mouth to open
+        // Reset mouth and ensure visibility
         this.updateMouth(0.2);
+        this.path.attr('opacity', 1);
     }
 
     move(newGridX, newGridY, angle, duration) {

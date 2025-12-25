@@ -90,33 +90,25 @@ export class Ghost {
         this.state = 'EXITING';
     }
 
-    // --- NEW: Reset for Lives System ---
     reset() {
-        // 1. Reset Position Data
         this.gridX = this.startGridX;
         this.gridY = this.startGridY;
         this.prevGridX = this.startGridX;
         this.prevGridY = this.startGridY;
 
-        // 2. Reset State
         this.state = (this.releaseTick > 0) ? 'AT_HOME' : 'ACTIVE';
         this.isScared = false;
         this.isEaten = false;
         this.currentDir = DIRECTIONS.RIGHT;
         this.updateColor(this.baseColor);
 
-        // 3. Reset Pixels
         this.x = (this.gridX + 0.5) * CELL_SIZE;
         this.y = (this.gridY + 0.5) * CELL_SIZE;
 
-        // 4. Interrupt transition and snap
         this.group.interrupt()
             .attr('transform', `translate(${this.x}, ${this.y})`);
 
-        // Reset Eyes
         this.updateEyes(this.currentDir);
-
-        // Reset Body Opacity (in case they were eaten)
         this.bodyParts.attr('opacity', 1);
     }
 
@@ -171,7 +163,28 @@ export class Ghost {
 
     // --- PERSONALITY AI ENGINE ---
 
-    processAI(pacman, blinky, duration) {
+    // NEW ARGUMENT: gameMode ('CHASE' or 'SCATTER')
+    processAI(pacman, blinky, duration, gameMode) {
+
+        // 1. SCATTER MODE LOGIC
+        if (gameMode === 'SCATTER') {
+            if (this.baseColor === 'red') {
+                // Blinky: Top Right (Corner)
+                this.moveToTarget(NUM_COLS - 2, 0, duration);
+            } else if (this.baseColor === 'pink') {
+                // Pinky: Top Left
+                this.moveToTarget(1, 0, duration);
+            } else if (this.baseColor === 'cyan') {
+                // Inky: Bottom Right
+                this.moveToTarget(NUM_COLS - 2, NUM_ROWS - 1, duration);
+            } else if (this.baseColor === 'orange') {
+                // Clyde: Bottom Left
+                this.moveToTarget(0, NUM_ROWS - 1, duration);
+            }
+            return; // Stop here, don't do chase logic
+        }
+
+        // 2. CHASE MODE LOGIC (Standard Personalities)
         if (this.baseColor === 'red') {
             this.moveToTarget(pacman.gridX, pacman.gridY, duration);
         }

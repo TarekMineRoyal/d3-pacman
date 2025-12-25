@@ -42,10 +42,14 @@ let scaredTimer = 0;
 let currentDirection = { x: 0, y: 0, angle: 90 };
 let isPaused = false;
 
+// --- Scatter/Chase Wave State ---
+let gameMode = 'SCATTER';
+let modeClock = 0;
+
 const scoreSpan = document.getElementById('score-value');
 const livesSpan = document.getElementById('lives-value');
 
-// --- NEW: Restart Button Logic ---
+// Restart Button
 document.getElementById('restart-btn').addEventListener('click', () => {
     window.location.reload();
 });
@@ -105,20 +109,35 @@ function handleLifeLost() {
     lives--;
     livesSpan.innerText = lives;
 
+    // 1. Hide Ghosts immediately (Authentic behavior)
+    ghosts.forEach(g => g.group.attr('opacity', 0));
+
+    // 2. Trigger Death Animation
+    pacman.die();
+
     if (lives === 0) {
-        setTimeout(() => alert("Game Over! Final Score: " + score), 100);
+        setTimeout(() => alert("Game Over! Final Score: " + score), 2000);
     } else {
         setTimeout(() => {
+            // 3. Reset Actors
             pacman.reset();
-            ghosts.forEach(g => g.reset());
+            ghosts.forEach(g => {
+                g.reset();
+                g.group.attr('opacity', 1); // Make ghosts visible again
+            });
 
+            // Reset States
             tick = 0;
             scaredTimer = 0;
             currentDirection = { x: 0, y: 0, angle: 90 };
 
+            // Reset Wave
+            gameMode = 'SCATTER';
+            modeClock = 0;
+
             isPaused = false;
             startGameLoop();
-        }, 2000);
+        }, 2000); // Wait 2 seconds (animation is 1.5s)
     }
 }
 
@@ -148,6 +167,22 @@ function startGameLoop() {
         if (isPaused) return;
 
         tick++;
+        modeClock++; // Count time in current mode
+
+        // --- WAVE TIMER LOGIC ---
+        // 7 Seconds Scatter (7000ms), 20 Seconds Chase (20000ms)
+        const scatterTicks = 7000 / GAME_SPEED;
+        const chaseTicks = 20000 / GAME_SPEED;
+
+        if (gameMode === 'SCATTER' && modeClock > scatterTicks) {
+            gameMode = 'CHASE';
+            modeClock = 0;
+            console.log("Switching to CHASE Mode");
+        } else if (gameMode === 'CHASE' && modeClock > chaseTicks) {
+            gameMode = 'SCATTER';
+            modeClock = 0;
+            console.log("Switching to SCATTER Mode");
+        }
 
         // A. Manage Scared Mode
         if (scaredTimer > 0) {
@@ -245,7 +280,7 @@ function startGameLoop() {
                 }
                 else {
                     pacman.currentDir = currentDirection;
-                    ghost.processAI(pacman, ghosts[0], duration);
+                    ghost.processAI(pacman, ghosts[0], duration, gameMode);
                 }
 
                 checkCollision(ghost);
