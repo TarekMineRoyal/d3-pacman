@@ -2,7 +2,7 @@ import { drawGrid } from './components/Grid.js';
 import { Pacman } from './components/Pacman.js';
 import { level1 } from './data/level1.js';
 import { CELL_SIZE, CELL_TYPES, GAME_SPEED } from './constants.js';
-import { InputHandler } from './utils/Input.js'; // Import Input
+import { InputHandler } from './utils/Input.js';
 
 // ... (Dimensions and SVG setup remain the same) ...
 const NUM_ROWS = level1.length;
@@ -22,23 +22,45 @@ drawGrid(svg, level1);
 const pacman = new Pacman(svg, 9, 16);
 const input = new InputHandler(); // Initialize Input
 
-// --- The Game Loop ---
-// d3.interval runs the callback every GAME_SPEED milliseconds
-const timer = d3.interval(() => {
+// State
+let score = 0;
+const scoreSpan = document.getElementById('score-value');
 
+// --- Helper Function: Handle Eating ---
+function handleEat(gridX, gridY) {
+    const cellType = level1[gridY][gridX];
+
+    if (cellType === CELL_TYPES.DOT || cellType === CELL_TYPES.POWER_PELLET) {
+        // 1. Update Data (So we don't eat it twice)
+        level1[gridY][gridX] = CELL_TYPES.EMPTY;
+
+        // 2. Update Visuals (D3)
+        // We filter all cells to find the one at the current position
+        const cell = svg.selectAll('.cell')
+            .filter(d => d.x === gridX && d.y === gridY);
+
+        // Remove the circle inside that cell group
+        cell.select('circle').remove();
+
+        // 3. Update Score
+        score += (cellType === CELL_TYPES.POWER_PELLET) ? 50 : 10;
+        scoreSpan.innerText = score;
+    }
+}
+
+// --- The Game Loop ---
+const timer = d3.interval(() => {
     const direction = input.getDirection();
 
-    // Basic Movement Logic (No Collision yet)
-    // We calculate the POTENTIAL new position
     const nextX = pacman.gridX + direction.x;
     const nextY = pacman.gridY + direction.y;
 
-    // IMPORTANT: Collision Check
-    // We only move if the next cell is NOT a wall
     const nextCell = level1[nextY][nextX];
 
     if (nextCell !== CELL_TYPES.WALL && nextCell !== CELL_TYPES.GHOST_HOUSE) {
         pacman.move(nextX, nextY, direction.angle);
-    }
 
+        // NEW: Check for food after moving
+        handleEat(nextX, nextY);
+    }
 }, GAME_SPEED);
