@@ -1,6 +1,8 @@
 import { CELL_SIZE, CELL_TYPES, DIRECTIONS, COLORS } from '../constants.js';
 import { level1 } from '../data/level1.js';
 
+const NUM_COLS = level1[0].length; // 28
+
 export class Ghost {
     constructor(svg, startGridX, startGridY, color, releaseTick = 0) {
         this.svg = svg;
@@ -21,9 +23,6 @@ export class Ghost {
         this.releaseTick = releaseTick;
 
         // --- STATE MACHINE ---
-        // 'AT_HOME' = Bouncing inside the box, waiting for releaseTick
-        // 'EXITING' = Navigating from inside the box to the door (9, 8)
-        // 'ACTIVE'  = Roaming the maze (Chase/Scatter/Random)
         this.state = (releaseTick > 0) ? 'AT_HOME' : 'ACTIVE';
 
         this.isScared = false;
@@ -38,7 +37,6 @@ export class Ghost {
         this.render();
     }
 
-    // Helper for legacy checks or external logic
     get isInHouse() {
         return this.state === 'AT_HOME';
     }
@@ -62,46 +60,39 @@ export class Ghost {
 
     // --- ACTIONS ---
 
-    // Idle animation while waiting
     bounce(tick) {
         if (this.state !== 'AT_HOME') return;
-        // Simple Sine wave bounce (Up/Down by 3 pixels)
         const bounceY = Math.sin(tick * 0.5) * 3;
         this.group.attr('transform', `translate(${this.x}, ${this.y + bounceY})`);
     }
 
-    // Trigger the exit sequence
     startExit() {
         if (this.state === 'AT_HOME') {
             this.state = 'EXITING';
-            // Snap pixel position to grid to ensure clean movement start
             this.x = (this.gridX + 0.5) * CELL_SIZE;
             this.y = (this.gridY + 0.5) * CELL_SIZE;
             this.group.attr('transform', `translate(${this.x}, ${this.y})`);
         }
     }
 
+    // NEW: Handle revival logic to prevent getting stuck
+    revive() {
+        this.setEaten(false);
+        this.state = 'EXITING'; // Immediately start leaving the house
+    }
+
     // --- STATES & MOVEMENT ---
 
-    /**
-     * Handles the hard-coded path from the ghost house to the door (9, 8).
-     * Path: Center Row (y=10) -> Center Column (x=9) -> Door (9,8)
-     */
     moveExiting(duration) {
         let nextDir = DIRECTIONS.NONE;
 
-        // 1. If not at Center Column (9), move laterally
-        if (this.gridX < 9) nextDir = DIRECTIONS.RIGHT;
-        else if (this.gridX > 9) nextDir = DIRECTIONS.LEFT;
-
-        // 2. If at Center Column (9), but below Door (8), move UP
-        else if (this.gridY > 8) nextDir = DIRECTIONS.UP;
-
-        // 3. If at Door (9, 8) or higher, we are OUT
+        // Target: Center Col (14), Top of House (Row 11)
+        if (this.gridX < 14) nextDir = DIRECTIONS.RIGHT;
+        else if (this.gridX > 14) nextDir = DIRECTIONS.LEFT;
+        else if (this.gridY > 11) nextDir = DIRECTIONS.UP;
         else {
             this.state = 'ACTIVE';
-            this.currentDir = DIRECTIONS.LEFT; // Standard entry direction
-            // Force an immediate normal move or just wait for next tick
+            this.currentDir = DIRECTIONS.LEFT;
             return;
         }
 
@@ -142,24 +133,27 @@ export class Ghost {
 
     // --- SMART AI MOVEMENT ---
 
-    moveTowardsHome(duration) {
-        // Reuse the generic target function
-        this.moveToTarget(9, 9, duration);
+    getEuclideanDistance(x1, y1, x2, y2) {
+        const dx = Math.abs(x1 - x2);
+        const dy = Math.abs(y1 - y2);
+        const distDirect = Math.hypot(dx, dy);
+        const distWrapped = Math.hypot(NUM_COLS - dx, dy);
+        return Math.min(distDirect, distWrapped);
     }
 
-    /**
-     * The Main AI Function.
-     * Evaluates all valid moves and picks the one that minimizes distance to target.
-     */
+    moveTowardsHome(duration) {
+        // FIX: Target the INSIDE of the house (14, 14), not the door (14, 11)
+        this.moveToTarget(14, 14, duration);
+    }
+
     moveToTarget(targetX, targetY, duration) {
         const possibleMoves = this.getValidMoves();
         if (possibleMoves.length === 0) return;
 
         possibleMoves.sort((a, b) => {
-            // Euclidean distance
-            const distA = Math.hypot((this.gridX + a.x) - targetX, (this.gridY + a.y) - targetY);
-            const distB = Math.hypot((this.gridX + b.x) - targetX, (this.gridY + b.y) - targetY);
-            return distA - distB; // Shortest distance first
+            const distA = this.getEuclideanDistance(this.gridX + a.x, this.gridY + a.y, targetX, targetY);
+            const distB = this.getEuclideanDistance(this.gridX + b.x, this.gridY + b.y, targetX, targetY);
+            return distA - distB;
         });
 
         this.executeMove(possibleMoves[0], duration);
@@ -169,15 +163,21 @@ export class Ghost {
         const possibleMoves = this.getValidMoves();
         if (possibleMoves.length === 0) return;
 
-        // Note: For "Fleeing", we might want to improve this later to avoid dead ends,
-        // but for now, maximizing immediate distance is the standard simple AI.
         possibleMoves.sort((a, b) => {
-            const distA = Math.hypot((this.gridX + a.x) - targetX, (this.gridY + a.y) - targetY);
-            const distB = Math.hypot((this.gridX + b.x) - targetX, (this.gridY + b.y) - targetY);
-            return distB - distA; // Longest distance first
+            const distA = this.getEuclideanDistance(this.gridX + a.x, this.gridY + a.y, targetX, targetY);
+            const distB = this.getEuclideanDistance(this.gridX + b.x, this.gridY + b.y, targetX, targetY);
+            return distB - distA;
         });
 
         this.executeMove(possibleMoves[0], duration);
+    }
+
+    moveRandom(duration) {
+        const possibleMoves = this.getValidMoves();
+        if (possibleMoves.length > 0) {
+            const randomMove = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
+            this.executeMove(randomMove, duration);
+        }
     }
 
     getValidMoves() {
@@ -187,31 +187,48 @@ export class Ghost {
             const nextX = this.gridX + dir.x;
             const nextY = this.gridY + dir.y;
 
-            const type = level1[nextY][nextX];
+            let type = CELL_TYPES.WALL;
+            // Bounds Check for Tunnel
+            if (nextX < 0 || nextX >= NUM_COLS) {
+                type = CELL_TYPES.EMPTY;
+            } else {
+                type = level1[nextY][nextX];
+            }
 
-            // Standard Rule: Cannot hit walls
+            // --- AI FIX: RESTRICTED ZONES ---
+            // If the ghost is ACTIVE (hunting) and NOT EATEN (returning),
+            // it treats the GHOST_HOUSE and DOOR as WALLS.
+            if (this.state === 'ACTIVE' && !this.isEaten) {
+                if (type === CELL_TYPES.GHOST_HOUSE || type === CELL_TYPES.DOOR) {
+                    type = CELL_TYPES.WALL;
+                }
+            }
+
             if (type !== CELL_TYPES.WALL) {
-                // Ghost Logic: Don't reverse direction 180 degrees (unless stuck)
                 if (dir.x !== -this.currentDir.x || dir.y !== -this.currentDir.y) {
                     possibleMoves.push(dir);
                 }
             }
         });
 
-        // Dead End handling: Allow reverse if no other option
         if (possibleMoves.length === 0) {
             Object.values(DIRECTIONS).forEach(dir => {
                 if (dir === DIRECTIONS.NONE) return;
                 const nextX = this.gridX + dir.x;
                 const nextY = this.gridY + dir.y;
-                if (level1[nextY][nextX] !== CELL_TYPES.WALL) possibleMoves.push(dir);
+
+                let type = (nextX < 0 || nextX >= NUM_COLS) ? CELL_TYPES.EMPTY : level1[nextY][nextX];
+                if (this.state === 'ACTIVE' && !this.isEaten) {
+                    if (type === CELL_TYPES.GHOST_HOUSE || type === CELL_TYPES.DOOR) type = CELL_TYPES.WALL;
+                }
+
+                if (type !== CELL_TYPES.WALL) possibleMoves.push(dir);
             });
         }
         return possibleMoves;
     }
 
     executeMove(dir, duration) {
-        // PHYSICS FIX: Save history
         this.prevGridX = this.gridX;
         this.prevGridY = this.gridY;
 

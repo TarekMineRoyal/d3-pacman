@@ -20,18 +20,21 @@ const svg = d3.select('#game-container')
 // Render the Map
 drawGrid(svg, level1);
 
-// Spawn Actors
-const pacman = new Pacman(svg, 9, 16);
+// Spawn Actors (Updated for 28x31 Map)
+// Pacman starts at (14, 23)
+const pacman = new Pacman(svg, 14, 23);
 
 // Spawn Logic
-// Constructor: (svg, x, y, color, releaseTick)
-// Coordinates: (9, 8) is Outside (Blinky's spot)
-// Coordinates: (9, 10), (8, 10), (10, 10) are INSIDE the Ghost House
+// House Area: Rows 13-15, Cols 10-17. Door at (13, 12) & (14, 12).
+// Blinky: (14, 11) - Outside
+// Pinky: (14, 14) - Center
+// Inky: (12, 14) - Left
+// Clyde: (16, 14) - Right
 const ghosts = [
-    new Ghost(svg, 9, 8, 'red', 0),         // Blinky (Starts Active)
-    new Ghost(svg, 9, 10, 'pink', 100),     // Pinky (Center)
-    new Ghost(svg, 8, 10, 'cyan', 300),     // Inky (Left)
-    new Ghost(svg, 10, 10, 'orange', 500)   // Clyde (Right)
+    new Ghost(svg, 14, 11, 'red', 0),        // Blinky
+    new Ghost(svg, 14, 14, 'pink', 100),     // Pinky
+    new Ghost(svg, 12, 14, 'cyan', 300),     // Inky
+    new Ghost(svg, 16, 14, 'orange', 500)    // Clyde
 ];
 
 const input = new InputHandler();
@@ -39,7 +42,7 @@ const input = new InputHandler();
 // --- 2. Game State ---
 let score = 0;
 let tick = 0;
-let scaredTimer = 0; // Counts down when a power pellet is eaten
+let scaredTimer = 0;
 let currentDirection = { x: 0, y: 0, angle: 90 };
 const scoreSpan = document.getElementById('score-value');
 
@@ -56,23 +59,20 @@ console.log(`Total Dots to Eat: ${totalDots}`);
 
 // --- 3. Helper Functions ---
 
-/**
- * Handles interactions when Pac-Man enters a tile (Eating Dots/Power Pellets)
- */
 function handleEat(gridX, gridY) {
+    // Boundary check for tunnel eating
+    if (gridY < 0 || gridY >= NUM_ROWS || gridX < 0 || gridX >= NUM_COLS) return;
+
     const cellType = level1[gridY][gridX];
 
     if (cellType === CELL_TYPES.DOT || cellType === CELL_TYPES.POWER_PELLET) {
-        // Update Data
         level1[gridY][gridX] = CELL_TYPES.EMPTY;
 
-        // Update Visuals
         svg.selectAll('.cell')
             .filter(d => d.x === gridX && d.y === gridY)
             .select('circle')
             .remove();
 
-        // Scoring & Logic
         if (cellType === CELL_TYPES.POWER_PELLET) {
             score += 50;
             scaredTimer = GAME_CONSTANTS.SCARED_DURATION;
@@ -83,39 +83,27 @@ function handleEat(gridX, gridY) {
 
         scoreSpan.innerText = score;
 
-        // Win Condition Check
         totalDots--;
-
         if (totalDots === 0) {
             timer.stop();
             setTimeout(() => {
                 alert(`YOU WIN! Perfect Score: ${score}`);
-                // Optional: location.reload(); 
             }, 10);
         }
     }
 }
 
-/**
- * Checks if Pac-Man and a specific Ghost are occupying the same tile.
- * NOW INCLUDES: Physics fix for "Tunneling" (Swapping tiles).
- */
 function checkCollision(ghost) {
-    // 1. Standard Overlap
     const overlap = (ghost.gridX === pacman.gridX && ghost.gridY === pacman.gridY);
-
-    // 2. Tunneling (Swap) Check
     const swap = (ghost.gridX === pacman.prevGridX && ghost.gridY === pacman.prevGridY &&
         ghost.prevGridX === pacman.gridX && ghost.prevGridY === pacman.gridY);
 
     if (overlap || swap) {
         if (ghost.isScared && !ghost.isEaten) {
-            // CASE A: Eat the Ghost
             score += 200;
             scoreSpan.innerText = score;
             ghost.setEaten(true);
         } else if (!ghost.isScared && !ghost.isEaten) {
-            // CASE B: Game Over (Only if ghost is dangerous)
             timer.stop();
             setTimeout(() => alert("Game Over! Final Score: " + score), 10);
         }
@@ -139,24 +127,41 @@ const timer = d3.interval(() => {
 
     // B. Pac-Man Logic (Every 4 ticks)
     if (tick % 4 === 0) {
+
+        // --- WRAPPING LOGIC (The Tunnel) ---
+        if (pacman.gridX < 0) {
+            pacman.gridX = NUM_COLS - 1;
+            pacman.x = (pacman.gridX + 0.5) * CELL_SIZE;
+            pacman.group.interrupt().attr('transform', `translate(${pacman.x}, ${pacman.y}) rotate(${pacman.rotation})`);
+        }
+        else if (pacman.gridX >= NUM_COLS) {
+            pacman.gridX = 0;
+            pacman.x = (pacman.gridX + 0.5) * CELL_SIZE;
+            pacman.group.interrupt().attr('transform', `translate(${pacman.x}, ${pacman.y}) rotate(${pacman.rotation})`);
+        }
+
         const nextDirection = input.getDirection();
 
         let nextX = pacman.gridX + nextDirection.x;
         let nextY = pacman.gridY + nextDirection.y;
-        let nextCell = level1[nextY][nextX];
+
+        let isTunnel = (nextY === 14 && (nextX < 0 || nextX >= NUM_COLS));
+        let nextCell = !isTunnel ? level1[nextY][nextX] : CELL_TYPES.EMPTY;
 
         // 1. Try to turn
-        if (nextCell !== CELL_TYPES.WALL && nextCell !== CELL_TYPES.GHOST_HOUSE) {
+        if (isTunnel || (nextCell !== CELL_TYPES.WALL && nextCell !== CELL_TYPES.GHOST_HOUSE)) {
             currentDirection = nextDirection;
         } else {
             // 2. If turn failed, keep going straight
             nextX = pacman.gridX + currentDirection.x;
             nextY = pacman.gridY + currentDirection.y;
-            nextCell = level1[nextY][nextX];
+
+            isTunnel = (nextY === 14 && (nextX < 0 || nextX >= NUM_COLS));
+            nextCell = !isTunnel ? level1[nextY][nextX] : CELL_TYPES.EMPTY;
         }
 
         // 3. Move if valid
-        if (nextCell !== CELL_TYPES.WALL && nextCell !== CELL_TYPES.GHOST_HOUSE) {
+        if (isTunnel || (nextCell !== CELL_TYPES.WALL && nextCell !== CELL_TYPES.GHOST_HOUSE)) {
             pacman.move(nextX, nextY, currentDirection.angle, 4 * GAME_SPEED);
             handleEat(nextX, nextY);
         }
@@ -165,7 +170,7 @@ const timer = d3.interval(() => {
     // C. Ghost Logic
     ghosts.forEach(ghost => {
 
-        // 1. AT HOME (Bouncing)
+        // 1. AT HOME
         if (ghost.state === 'AT_HOME') {
             ghost.bounce(tick);
             if (tick >= ghost.releaseTick) {
@@ -174,7 +179,7 @@ const timer = d3.interval(() => {
             return;
         }
 
-        // 2. EXITING (Scripted Path)
+        // 2. EXITING
         if (ghost.state === 'EXITING') {
             if (tick % 5 === 0) {
                 ghost.moveExiting(5 * GAME_SPEED);
@@ -182,40 +187,48 @@ const timer = d3.interval(() => {
             return;
         }
 
-        // 3. ACTIVE (Standard AI)
+        // 3. ACTIVE
         let moveRate = 5;
-        if (ghost.isEaten) moveRate = 2; // Fast eyes
-        else if (ghost.isScared) moveRate = 8; // Slow scared
+        if (ghost.isEaten) moveRate = 2;
+        else if (ghost.isScared) moveRate = 8;
 
         if (tick % moveRate === 0) {
             const duration = moveRate * GAME_SPEED;
 
+            // --- GHOST WRAPPING LOGIC ---
+            if (ghost.gridX < 0) {
+                ghost.gridX = NUM_COLS - 1;
+                ghost.x = (ghost.gridX + 0.5) * CELL_SIZE;
+                ghost.group.interrupt().attr('transform', `translate(${ghost.x}, ${ghost.y})`);
+            } else if (ghost.gridX >= NUM_COLS) {
+                ghost.gridX = 0;
+                ghost.x = (ghost.gridX + 0.5) * CELL_SIZE;
+                ghost.group.interrupt().attr('transform', `translate(${ghost.x}, ${ghost.y})`);
+            }
+
             if (ghost.isEaten) {
                 ghost.moveTowardsHome(duration);
-                // Revival Check near door (9, 8)
-                if (Math.abs(ghost.gridX - 9) <= 1 && Math.abs(ghost.gridY - 8) <= 1) {
-                    ghost.setEaten(false);
+
+                // REVIVAL CHECK: Target Center of House (14, 14)
+                if (Math.abs(ghost.gridX - 14) <= 1 && Math.abs(ghost.gridY - 14) <= 1) {
+                    ghost.revive();
                 }
             }
             else if (ghost.isScared) {
                 ghost.moveAwayFrom(pacman.gridX, pacman.gridY, duration);
             }
             else {
-                // --- PERSONALITY AI ---
+                // PERSONALITY AI
                 if (ghost.baseColor === 'red') {
-                    // BLINKY: Direct Chase
                     ghost.moveToTarget(pacman.gridX, pacman.gridY, duration);
                 }
                 else if (ghost.baseColor === 'pink') {
-                    // PINKY: Ambush (4 tiles ahead)
                     const offset = 4;
-                    // We use 'currentDirection' from Pac-Man's state
                     const targetX = pacman.gridX + (currentDirection.x * offset);
                     const targetY = pacman.gridY + (currentDirection.y * offset);
                     ghost.moveToTarget(targetX, targetY, duration);
                 }
                 else {
-                    // INKY & CLYDE: Random wandering (for now)
                     ghost.moveRandom(duration);
                 }
             }
@@ -224,7 +237,7 @@ const timer = d3.interval(() => {
         }
     });
 
-    // D. Global Collision (Safety Check)
+    // D. Global Collision
     ghosts.forEach(ghost => {
         if (ghost.state === 'ACTIVE') {
             checkCollision(ghost);

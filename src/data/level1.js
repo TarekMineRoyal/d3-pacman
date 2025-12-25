@@ -1,7 +1,5 @@
 import { CELL_TYPES } from '../constants.js';
 
-// Destructuring for visual brevity. 
-// This makes the matrix look like the map itself.
 const {
     WALL: W,
     DOT: D,
@@ -11,32 +9,37 @@ const {
     DOOR: O
 } = CELL_TYPES;
 
-// 1 = Wall (Blue)
-// 2 = Dot (Pink)
-// 3 = Power Pellet (Big)
-// 0 = Empty (Black)
-// 4 = Ghost House (Black/Restricted)
-// 5 = Door (Pink Line)
-
+// Standard Arcade Layout (28 x 31)
 export const level1 = [
-    [W, W, W, W, W, W, W, W, W, W, W, W, W, W, W, W, W, W, W],
-    [W, D, D, D, D, D, D, D, D, W, D, D, D, D, D, D, D, D, W],
-    [W, P, W, W, D, W, W, W, D, W, D, W, W, W, D, W, W, P, W],
-    [W, D, W, W, D, W, W, W, D, W, D, W, W, W, D, W, W, D, W],
-    [W, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, W],
-    [W, D, W, W, D, W, D, W, W, W, W, W, D, W, D, W, W, D, W],
-    [W, D, D, D, D, W, D, D, D, W, D, D, D, W, D, D, D, D, W],
-    [W, W, W, W, D, W, W, W, E, W, E, W, W, W, D, W, W, W, W],
-    [E, E, E, W, D, W, E, E, E, E, E, E, E, W, D, W, E, E, E],
-    [W, W, W, W, D, W, E, W, W, O, W, W, E, W, D, W, W, W, W],
-    [E, D, D, D, D, E, E, W, G, G, G, W, E, E, D, D, D, D, E], // Middle Row (Tunnel)
-    [W, W, W, W, D, W, E, W, W, W, W, W, E, W, D, W, W, W, W],
-    [E, E, E, W, D, W, E, E, E, E, E, E, E, W, D, W, E, E, E],
-    [W, W, W, W, D, W, D, W, W, W, W, W, D, W, W, W, W, W, W],
-    [W, D, D, D, D, D, D, D, D, W, D, D, D, D, D, D, D, D, W],
-    [W, D, W, W, D, W, W, W, D, W, D, W, W, W, D, W, W, D, W],
-    [W, P, D, W, D, D, D, D, D, E, D, D, D, D, D, W, D, P, W],
-    [W, W, D, W, D, W, D, W, W, W, W, W, D, W, D, W, D, W, W],
-    [W, D, D, D, D, W, D, D, D, W, D, D, D, W, D, D, D, D, W],
-    [W, W, W, W, W, W, W, W, W, W, W, W, W, W, W, W, W, W, W]
+    [W, W, W, W, W, W, W, W, W, W, W, W, W, W, W, W, W, W, W, W, W, W, W, W, W, W, W, W],
+    [W, D, D, D, D, D, D, D, D, D, D, D, D, W, W, D, D, D, D, D, D, D, D, D, D, D, D, W],
+    [W, D, W, W, W, W, D, W, W, W, W, W, D, W, W, D, W, W, W, W, W, D, W, W, W, W, D, W],
+    [W, P, W, W, W, W, D, W, W, W, W, W, D, W, W, D, W, W, W, W, W, D, W, W, W, W, P, W],
+    [W, D, W, W, W, W, D, W, W, W, W, W, D, W, W, D, W, W, W, W, W, D, W, W, W, W, D, W],
+    [W, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, W],
+    [W, D, W, W, W, W, D, W, W, D, W, W, W, W, W, W, W, W, D, W, W, D, W, W, W, W, D, W],
+    [W, D, W, W, W, W, D, W, W, D, W, W, W, W, W, W, W, W, D, W, W, D, W, W, W, W, D, W],
+    [W, D, D, D, D, D, D, W, W, D, D, D, D, W, W, D, D, D, D, W, W, D, D, D, D, D, D, W],
+    [W, W, W, W, W, W, D, W, W, W, W, W, E, W, W, E, W, W, W, W, W, D, W, W, W, W, W, W],
+    [E, E, E, E, E, W, D, W, W, W, W, W, E, W, W, E, W, W, W, W, W, D, W, E, E, E, E, E], // Tunnel Row 1
+    [W, W, W, W, W, W, D, W, W, E, E, E, E, E, E, E, E, E, E, W, W, D, W, W, W, W, W, W],
+    [W, W, W, W, W, W, D, W, W, E, W, W, W, O, O, W, W, W, E, W, W, D, W, W, W, W, W, W],
+    [W, W, W, W, W, W, D, W, W, E, W, G, G, G, G, G, G, W, E, W, W, D, W, W, W, W, W, W],
+    [E, E, E, E, E, E, D, E, E, E, W, G, G, G, G, G, G, W, E, E, E, D, E, E, E, E, E, E], // Tunnel Row 2 (Middle)
+    [W, W, W, W, W, W, D, W, W, E, W, G, G, G, G, G, G, W, E, W, W, D, W, W, W, W, W, W],
+    [W, W, W, W, W, W, D, W, W, E, W, W, W, W, W, W, W, W, E, W, W, D, W, W, W, W, W, W],
+    [W, W, W, W, W, W, D, W, W, E, E, E, E, E, E, E, E, E, E, W, W, D, W, W, W, W, W, W],
+    [E, E, E, E, E, W, D, W, W, E, W, W, W, W, W, W, W, W, E, W, W, D, W, E, E, E, E, E], // Tunnel Row 3
+    [W, W, W, W, W, W, D, W, W, E, W, W, W, W, W, W, W, W, E, W, W, D, W, W, W, W, W, W],
+    [W, D, D, D, D, D, D, D, D, D, D, D, D, W, W, D, D, D, D, D, D, D, D, D, D, D, D, W],
+    [W, D, W, W, W, W, D, W, W, W, W, W, D, W, W, D, W, W, W, W, W, D, W, W, W, W, D, W],
+    [W, D, W, W, W, W, D, W, W, W, W, W, D, W, W, D, W, W, W, W, W, D, W, W, W, W, D, W],
+    [W, P, D, D, W, W, D, D, D, D, D, D, D, E, E, D, D, D, D, D, D, D, W, W, D, D, P, W],
+    [W, W, W, D, W, W, D, W, W, D, W, W, W, W, W, W, W, W, D, W, W, D, W, W, D, W, W, W],
+    [W, W, W, D, W, W, D, W, W, D, W, W, W, W, W, W, W, W, D, W, W, D, W, W, D, W, W, W],
+    [W, D, D, D, D, D, D, W, W, D, D, D, D, W, W, D, D, D, D, W, W, D, D, D, D, D, D, W],
+    [W, D, W, W, W, W, W, W, W, W, W, W, D, W, W, D, W, W, W, W, W, W, W, W, W, W, D, W],
+    [W, D, W, W, W, W, W, W, W, W, W, W, D, W, W, D, W, W, W, W, W, W, W, W, W, W, D, W],
+    [W, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, W],
+    [W, W, W, W, W, W, W, W, W, W, W, W, W, W, W, W, W, W, W, W, W, W, W, W, W, W, W, W]
 ];
