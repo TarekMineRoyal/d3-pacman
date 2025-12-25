@@ -21,7 +21,9 @@ export const COLORS = {
     WALL: '#1919A6',        // Classic arcade blue
     DOT: '#ffb8ae',         // Soft pink/salmon color for pellets
     POWER_PELLET: '#ffb8ae',
-    DOOR: '#ffb8ff'         // Pinkish door
+    DOOR: '#ffb8ff',         // Pinkish door
+    SCARED_GHOST: '#0000FF', // Dark Blue
+    FLASH_GHOST: '#FFFFFF'
 };
 
 // --- Actors ---
@@ -45,4 +47,9 @@ export const DIRECTIONS = {
     LEFT: { x: -1, y: 0, angle: 270 },
     RIGHT: { x: 1, y: 0, angle: 90 },
     NONE: { x: 0, y: 0, angle: 90 } // Default state
+};
+
+export const GAME_CONSTANTS = {
+    SCARED_DURATION: 250, // in Ticks (approx 10 seconds at 40ms/tick)
+    FLASH_THRESHOLD: 50   // Start flashing when 50 ticks (2 sec) remain
 };

@@ -66,27 +66,32 @@ export class Pacman {
      * @param {Number} openness - A value between 0 (closed) and 0.2 (fully open)
      */
     updateMouth(openness) {
-        // Re-configure the arc generator with new angles
         this.arcGenerator
             .startAngle(Math.PI * openness)
             .endAngle(Math.PI * (2 - openness));
-
-        // Update the path data "d" attribute
         this.path.attr('d', this.arcGenerator);
     }
 
     /**
    * Moves Pac-Man to a specific grid tile.
    */
-    move(newGridX, newGridY, angle) {
+    move(newGridX, newGridY, angle, duration) {
         this.gridX = newGridX;
         this.gridY = newGridY;
 
-        // Call the visual update we wrote earlier
-        this.updatePosition(newGridX, newGridY, angle);
+        // Update internal pixel state
+        this.x = (newGridX + 0.5) * CELL_SIZE;
+        this.y = (newGridY + 0.5) * CELL_SIZE;
+        this.rotation = angle;
 
-        // Animate mouth (Simple toggle for now)
-        // We can make this smoother later
+        // Smooth Transition
+        this.group
+            .transition()              // 1. Start a transition
+            .duration(duration)        // 2. Set how long it takes (ms)
+            .ease(d3.easeLinear)       // 3. Constant speed (no acceleration)
+            .attr('transform', `translate(${this.x}, ${this.y}) rotate(${this.rotation})`);
+
+        // Animate mouth (Simple toggle)
         const mouthState = (this.gridX + this.gridY) % 2 === 0 ? 0.2 : 0.05;
         this.updateMouth(mouthState);
     }
