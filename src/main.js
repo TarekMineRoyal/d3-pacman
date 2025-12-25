@@ -22,11 +22,12 @@ drawGrid(svg, level1);
 
 const pacman = new Pacman(svg, 14, 23);
 
+// Ghosts (Blinky is Red, Pinky is Pink, Inky is Cyan, Clyde is Orange)
 const ghosts = [
-    new Ghost(svg, 14, 11, 'red', 0),
-    new Ghost(svg, 14, 14, 'pink', 100),
-    new Ghost(svg, 12, 14, 'cyan', 300),
-    new Ghost(svg, 16, 14, 'orange', 500)
+    new Ghost(svg, 14, 11, 'red', 0),        // Blinky (Out immediately)
+    new Ghost(svg, 14, 14, 'pink', 1),       // Pinky (Out almost immediately)
+    new Ghost(svg, 12, 14, 'cyan', 30),      // Inky (Waiting for 30 dots)
+    new Ghost(svg, 16, 14, 'orange', 60)     // Clyde (Waiting for 60 dots)
 ];
 
 const input = new InputHandler();
@@ -41,8 +42,12 @@ let scaredTimer = 0;
 let currentDirection = { x: 0, y: 0, angle: 90 };
 let isPaused = false;
 
+// Wave State
 let gameMode = 'SCATTER';
 let modeClock = 0;
+
+// NEW: Authentic Dot Counters
+let dotsEatenLife = 0; // Resets on death
 
 const scoreSpan = document.getElementById('score-value');
 const livesSpan = document.getElementById('lives-value');
@@ -63,7 +68,6 @@ console.log(`Total Dots to Eat: ${totalDots}`);
 
 // --- 3. Helper Functions ---
 
-// UPDATED: Now returns TRUE if we ate something, FALSE if empty
 function handleEat(gridX, gridY) {
     if (gridY < 0 || gridY >= NUM_ROWS || gridX < 0 || gridX >= NUM_COLS) return false;
 
@@ -77,7 +81,10 @@ function handleEat(gridX, gridY) {
             .select('circle')
             .remove();
 
-        sound.play('waka'); // Play sound on eat
+        sound.play('waka');
+
+        // NEW: Increment Dot Counter
+        dotsEatenLife++;
 
         if (cellType === CELL_TYPES.POWER_PELLET) {
             score += 50;
@@ -97,9 +104,9 @@ function handleEat(gridX, gridY) {
                 alert(`YOU WIN! Perfect Score: ${score}`);
             }, 10);
         }
-        return true; // Eaten!
+        return true;
     }
-    return false; // Nothing here
+    return false;
 }
 
 function handleLifeLost() {
@@ -132,6 +139,9 @@ function handleLifeLost() {
             currentDirection = { x: 0, y: 0, angle: 90 };
             gameMode = 'SCATTER';
             modeClock = 0;
+
+            // NEW: Reset Dot Counter on Death (Makes it harder!)
+            dotsEatenLife = 0;
 
             isPaused = false;
             startGameLoop();
@@ -170,25 +180,27 @@ function startGameLoop() {
         tick++;
         modeClock++;
 
-        // Audio State
-        if (scaredTimer > 0) {
-            sound.startScared();
-        } else {
-            sound.startSiren();
-        }
+        // Audio
+        if (scaredTimer > 0) sound.startScared();
+        else sound.startSiren();
 
-        // Wave Timer
+        // --- NEW: Authentic Wave Timer with Reversals ---
         const scatterTicks = 7000 / GAME_SPEED;
         const chaseTicks = 20000 / GAME_SPEED;
 
         if (gameMode === 'SCATTER' && modeClock > scatterTicks) {
             gameMode = 'CHASE';
             modeClock = 0;
+            // Force Reversal!
+            ghosts.forEach(g => g.reverse());
         } else if (gameMode === 'CHASE' && modeClock > chaseTicks) {
             gameMode = 'SCATTER';
             modeClock = 0;
+            // Force Reversal!
+            ghosts.forEach(g => g.reverse());
         }
 
+        // Scared Timer
         if (scaredTimer > 0) {
             scaredTimer--;
             if (scaredTimer <= GAME_CONSTANTS.FLASH_THRESHOLD && (scaredTimer % 10 === 0)) {
@@ -197,6 +209,17 @@ function startGameLoop() {
             if (scaredTimer === 0) {
                 ghosts.forEach(g => g.setScared(false));
             }
+        }
+
+        // --- NEW: Dot Counter Logic (Releasing Ghosts) ---
+        // Pinky (Index 1): Releases instantly (handled by init)
+        // Inky (Index 2): 30 Dots
+        if (ghosts[2].isInHouse && dotsEatenLife >= 30) {
+            ghosts[2].startExit();
+        }
+        // Clyde (Index 3): 60 Dots
+        if (ghosts[3].isInHouse && dotsEatenLife >= 60) {
+            ghosts[3].startExit();
         }
 
         // Pac-Man Logic
@@ -215,7 +238,6 @@ function startGameLoop() {
             const nextDirection = input.getDirection();
             let nextX = pacman.gridX + nextDirection.x;
             let nextY = pacman.gridY + nextDirection.y;
-
             let isTunnel = (nextY === 14 && (nextX < 0 || nextX >= NUM_COLS));
             let nextCell = !isTunnel ? level1[nextY][nextX] : CELL_TYPES.EMPTY;
 
@@ -230,13 +252,8 @@ function startGameLoop() {
 
             if (isTunnel || (nextCell !== CELL_TYPES.WALL && nextCell !== CELL_TYPES.GHOST_HOUSE)) {
                 pacman.move(nextX, nextY, currentDirection.angle, 4 * GAME_SPEED);
-
-                // --- NEW: Check if we ate something ---
                 const didEat = handleEat(nextX, nextY);
-                if (!didEat) {
-                    // If we moved but didn't eat, silence the waka
-                    sound.stop('waka');
-                }
+                if (!didEat) sound.stop('waka');
             }
         }
 
@@ -246,7 +263,9 @@ function startGameLoop() {
 
             if (ghost.state === 'AT_HOME') {
                 ghost.bounce(tick);
-                if (tick >= ghost.releaseTick) {
+                // Note: startExit() is now called by Dot Counter logic above, 
+                // OR by the constructor's initial releaseTick (for Blinky/Pinky).
+                if (tick >= ghost.releaseTick && ghost.releaseTick > 0) {
                     ghost.startExit();
                 }
                 return;
@@ -259,9 +278,8 @@ function startGameLoop() {
                 return;
             }
 
-            let moveRate = 5;
-            if (ghost.isEaten) moveRate = 2;
-            else if (ghost.isScared) moveRate = 8;
+            // --- NEW: Dynamic Speed (Cruise Elroy) ---
+            const moveRate = ghost.getMoveRate(totalDots);
 
             if (tick % moveRate === 0) {
                 const duration = moveRate * GAME_SPEED;

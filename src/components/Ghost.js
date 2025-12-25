@@ -21,7 +21,7 @@ export class Ghost {
         // Properties
         this.baseColor = color;
         this.currentColor = color;
-        this.releaseTick = releaseTick;
+        this.releaseTick = releaseTick; // (Kept for fallback, but we will mostly use Dot Counters now)
 
         // State
         this.state = (releaseTick > 0) ? 'AT_HOME' : 'ACTIVE';
@@ -62,6 +62,34 @@ export class Ghost {
 
     // --- ACTIONS ---
 
+    // NEW: Authentic Forced Reversal
+    reverse() {
+        if (this.state !== 'ACTIVE' || this.isEaten || this.isScared) return;
+
+        // Flip Direction: Right<->Left, Up<->Down
+        if (this.currentDir === DIRECTIONS.RIGHT) this.currentDir = DIRECTIONS.LEFT;
+        else if (this.currentDir === DIRECTIONS.LEFT) this.currentDir = DIRECTIONS.RIGHT;
+        else if (this.currentDir === DIRECTIONS.UP) this.currentDir = DIRECTIONS.DOWN;
+        else if (this.currentDir === DIRECTIONS.DOWN) this.currentDir = DIRECTIONS.UP;
+
+        // Important: Update eyes immediately to show the turn
+        this.updateEyes(this.currentDir);
+    }
+
+    // NEW: Centralized Speed Logic (Cruise Elroy)
+    getMoveRate(dotsRemaining) {
+        if (this.isEaten) return 2; // Fast return (Zoom)
+        if (this.isScared) return 8; // Slow (Scared)
+
+        // Cruise Elroy (Blinky Only)
+        if (this.baseColor === 'red' && this.state === 'ACTIVE') {
+            if (dotsRemaining <= 20) return 4; // Elroy 1 (Speed up)
+            if (dotsRemaining <= 10) return 3; // Elroy 2 (Super Fast)
+        }
+
+        return 5; // Normal Speed
+    }
+
     updateEyes(dir) {
         if (!this.pupilLeft || !this.pupilRight) return;
         const offsetX = dir.x * 2;
@@ -96,6 +124,7 @@ export class Ghost {
         this.prevGridX = this.startGridX;
         this.prevGridY = this.startGridY;
 
+        // Use releaseTick as basic fallback, but Main.js controls exit via DotCounters now
         this.state = (this.releaseTick > 0) ? 'AT_HOME' : 'ACTIVE';
         this.isScared = false;
         this.isEaten = false;
@@ -133,6 +162,12 @@ export class Ghost {
 
     setScared(scared) {
         if (this.isEaten || this.state === 'AT_HOME' || this.state === 'EXITING') return;
+
+        // Authentic: Reverse direction when becoming scared
+        if (scared && !this.isScared) {
+            this.reverse();
+        }
+
         this.isScared = scared;
         this.updateColor(scared ? COLORS.SCARED_GHOST : this.baseColor);
     }
@@ -163,28 +198,25 @@ export class Ghost {
 
     // --- PERSONALITY AI ENGINE ---
 
-    // NEW ARGUMENT: gameMode ('CHASE' or 'SCATTER')
     processAI(pacman, blinky, duration, gameMode) {
 
-        // 1. SCATTER MODE LOGIC
+        // 1. SCATTER MODE
         if (gameMode === 'SCATTER') {
             if (this.baseColor === 'red') {
                 // Blinky: Top Right (Corner)
+                // Note: Cruise Elroy DISABLES Scatter mode in original, but let's keep it simple.
                 this.moveToTarget(NUM_COLS - 2, 0, duration);
             } else if (this.baseColor === 'pink') {
-                // Pinky: Top Left
                 this.moveToTarget(1, 0, duration);
             } else if (this.baseColor === 'cyan') {
-                // Inky: Bottom Right
                 this.moveToTarget(NUM_COLS - 2, NUM_ROWS - 1, duration);
             } else if (this.baseColor === 'orange') {
-                // Clyde: Bottom Left
                 this.moveToTarget(0, NUM_ROWS - 1, duration);
             }
-            return; // Stop here, don't do chase logic
+            return;
         }
 
-        // 2. CHASE MODE LOGIC (Standard Personalities)
+        // 2. CHASE MODE
         if (this.baseColor === 'red') {
             this.moveToTarget(pacman.gridX, pacman.gridY, duration);
         }
