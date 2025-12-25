@@ -98,9 +98,19 @@ function handleEat(gridX, gridY) {
 
 /**
  * Checks if Pac-Man and a specific Ghost are occupying the same tile.
+ * NOW INCLUDES: Physics fix for "Tunneling" (Swapping tiles).
  */
 function checkCollision(ghost) {
-    if (ghost.gridX === pacman.gridX && ghost.gridY === pacman.gridY) {
+    // 1. Standard Overlap
+    const overlap = (ghost.gridX === pacman.gridX && ghost.gridY === pacman.gridY);
+
+    // 2. Tunneling (Swap) Check
+    // Occurs if they passed through each other in the same tick updates
+    // Logic: Ghost is where Pac-Man WAS, and Pac-Man is where Ghost WAS.
+    const swap = (ghost.gridX === pacman.prevGridX && ghost.gridY === pacman.prevGridY &&
+        ghost.prevGridX === pacman.gridX && ghost.prevGridY === pacman.gridY);
+
+    if (overlap || swap) {
         if (ghost.isScared && !ghost.isEaten) {
             // CASE A: Eat the Ghost
             score += 200;

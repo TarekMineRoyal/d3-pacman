@@ -11,6 +11,10 @@ export class Ghost {
         this.gridX = startGridX;
         this.gridY = startGridY;
 
+        // PHYSICS FIX: Track previous position
+        this.prevGridX = startGridX;
+        this.prevGridY = startGridY;
+
         // Properties
         this.baseColor = color;
         this.currentColor = color;
@@ -205,6 +209,10 @@ export class Ghost {
     }
 
     executeMove(dir, duration) {
+        // PHYSICS FIX: Save history
+        this.prevGridX = this.gridX;
+        this.prevGridY = this.gridY;
+
         this.currentDir = dir;
         this.gridX += dir.x;
         this.gridY += dir.y;

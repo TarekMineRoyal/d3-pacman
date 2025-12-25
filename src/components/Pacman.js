@@ -20,6 +20,10 @@ export class Pacman {
         this.gridX = startGridX;
         this.gridY = startGridY;
 
+        // PHYSICS FIX: Track previous position to detect "Tunneling" swaps
+        this.prevGridX = startGridX;
+        this.prevGridY = startGridY;
+
         // 1. Define the Shape Generator (The Arc)
         // D3 Arcs start at 12 o'clock (0 radians). 
         // We draw him facing UP, then rotate the whole group to change direction.
@@ -76,6 +80,10 @@ export class Pacman {
    * Moves Pac-Man to a specific grid tile.
    */
     move(newGridX, newGridY, angle, duration) {
+        // PHYSICS FIX: Save history before updating
+        this.prevGridX = this.gridX;
+        this.prevGridY = this.gridY;
+
         this.gridX = newGridX;
         this.gridY = newGridY;
 
