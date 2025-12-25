@@ -208,7 +208,6 @@ const timer = d3.interval(() => {
 
             if (ghost.isEaten) {
                 ghost.moveTowardsHome(duration);
-
                 // REVIVAL CHECK: Target Center of House (14, 14)
                 if (Math.abs(ghost.gridX - 14) <= 1 && Math.abs(ghost.gridY - 14) <= 1) {
                     ghost.revive();
@@ -218,19 +217,13 @@ const timer = d3.interval(() => {
                 ghost.moveAwayFrom(pacman.gridX, pacman.gridY, duration);
             }
             else {
-                // PERSONALITY AI
-                if (ghost.baseColor === 'red') {
-                    ghost.moveToTarget(pacman.gridX, pacman.gridY, duration);
-                }
-                else if (ghost.baseColor === 'pink') {
-                    const offset = 4;
-                    const targetX = pacman.gridX + (currentDirection.x * offset);
-                    const targetY = pacman.gridY + (currentDirection.y * offset);
-                    ghost.moveToTarget(targetX, targetY, duration);
-                }
-                else {
-                    ghost.moveRandom(duration);
-                }
+                // --- NEW: PERSONALITY AI ---
+                // We attach current direction to Pacman so Pinky/Inky can predict
+                pacman.currentDir = currentDirection;
+
+                // processAI(pacman, blinky, duration)
+                // ghosts[0] is Blinky
+                ghost.processAI(pacman, ghosts[0], duration);
             }
 
             checkCollision(ghost);

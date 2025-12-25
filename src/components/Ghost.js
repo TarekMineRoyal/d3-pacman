@@ -2,6 +2,7 @@ import { CELL_SIZE, CELL_TYPES, DIRECTIONS, COLORS } from '../constants.js';
 import { level1 } from '../data/level1.js';
 
 const NUM_COLS = level1[0].length; // 28
+const NUM_ROWS = level1.length;    // 31
 
 export class Ghost {
     constructor(svg, startGridX, startGridY, color, releaseTick = 0) {
@@ -13,7 +14,7 @@ export class Ghost {
         this.gridX = startGridX;
         this.gridY = startGridY;
 
-        // PHYSICS FIX: Track previous position
+        // Physics
         this.prevGridX = startGridX;
         this.prevGridY = startGridY;
 
@@ -22,18 +23,15 @@ export class Ghost {
         this.currentColor = color;
         this.releaseTick = releaseTick;
 
-        // --- STATE MACHINE ---
+        // State
         this.state = (releaseTick > 0) ? 'AT_HOME' : 'ACTIVE';
-
         this.isScared = false;
         this.isEaten = false;
-
         this.currentDir = DIRECTIONS.RIGHT;
 
-        // Pixel coordinates
+        // Render
         this.x = (startGridX + 0.5) * CELL_SIZE;
         this.y = (startGridY + 0.5) * CELL_SIZE;
-
         this.render();
     }
 
@@ -52,13 +50,38 @@ export class Ghost {
         this.bodyParts.append('rect').attr('x', -(CELL_SIZE * 0.4)).attr('y', -2)
             .attr('width', CELL_SIZE * 0.8).attr('height', CELL_SIZE * 0.45).attr('fill', this.currentColor);
 
-        this.group.append('circle').attr('cx', -4).attr('cy', -4).attr('r', 3).attr('fill', 'white');
-        this.group.append('circle').attr('cx', 4).attr('cy', -4).attr('r', 3).attr('fill', 'white');
-        this.group.append('circle').attr('cx', -2).attr('cy', -4).attr('r', 1.5).attr('fill', 'blue');
-        this.group.append('circle').attr('cx', 6).attr('cy', -4).attr('r', 1.5).attr('fill', 'blue');
+        // --- EYES RENDERING (Refactored for Movement) ---
+        this.eyesGroup = this.group.append('g').attr('class', 'eyes');
+
+        // Whites (Static bases)
+        // Left White (-4, -4), Right White (4, -4)
+        this.eyesGroup.append('circle').attr('cx', -4).attr('cy', -4).attr('r', 3).attr('fill', 'white');
+        this.eyesGroup.append('circle').attr('cx', 4).attr('cy', -4).attr('r', 3).attr('fill', 'white');
+
+        // Pupils (Dynamic - Saved to properties)
+        // Default looking RIGHT (Offset +2)
+        this.pupilLeft = this.eyesGroup.append('circle').attr('cx', -2).attr('cy', -4).attr('r', 1.5).attr('fill', 'blue');
+        this.pupilRight = this.eyesGroup.append('circle').attr('cx', 6).attr('cy', -4).attr('r', 1.5).attr('fill', 'blue');
     }
 
     // --- ACTIONS ---
+
+    // NEW: Updates pupil position based on direction
+    updateEyes(dir) {
+        if (!this.pupilLeft || !this.pupilRight) return;
+
+        // The Offset: Move 2 pixels in the direction of travel
+        const offsetX = dir.x * 2;
+        const offsetY = dir.y * 2;
+
+        // Base Positions (Where the center of the eye white is)
+        const baseLeftX = -4;
+        const baseRightX = 4;
+        const baseY = -4;
+
+        this.pupilLeft.attr('cx', baseLeftX + offsetX).attr('cy', baseY + offsetY);
+        this.pupilRight.attr('cx', baseRightX + offsetX).attr('cy', baseY + offsetY);
+    }
 
     bounce(tick) {
         if (this.state !== 'AT_HOME') return;
@@ -75,17 +98,15 @@ export class Ghost {
         }
     }
 
-    // NEW: Handle revival logic to prevent getting stuck
     revive() {
         this.setEaten(false);
-        this.state = 'EXITING'; // Immediately start leaving the house
+        this.state = 'EXITING';
     }
 
     // --- STATES & MOVEMENT ---
 
     moveExiting(duration) {
         let nextDir = DIRECTIONS.NONE;
-
         // Target: Center Col (14), Top of House (Row 11)
         if (this.gridX < 14) nextDir = DIRECTIONS.RIGHT;
         else if (this.gridX > 14) nextDir = DIRECTIONS.LEFT;
@@ -131,7 +152,39 @@ export class Ghost {
         this.bodyParts.select('rect').attr('fill', color);
     }
 
-    // --- SMART AI MOVEMENT ---
+    // --- PERSONALITY AI ENGINE ---
+
+    processAI(pacman, blinky, duration) {
+        if (this.baseColor === 'red') {
+            this.moveToTarget(pacman.gridX, pacman.gridY, duration);
+        }
+        else if (this.baseColor === 'pink') {
+            const pDir = pacman.currentDir || DIRECTIONS.RIGHT;
+            const targetX = pacman.gridX + (pDir.x * 4);
+            const targetY = pacman.gridY + (pDir.y * 4);
+            this.moveToTarget(targetX, targetY, duration);
+        }
+        else if (this.baseColor === 'cyan') {
+            const pDir = pacman.currentDir || DIRECTIONS.RIGHT;
+            const pivotX = pacman.gridX + (pDir.x * 2);
+            const pivotY = pacman.gridY + (pDir.y * 2);
+            const vecX = pivotX - blinky.gridX;
+            const vecY = pivotY - blinky.gridY;
+            const targetX = pivotX + vecX;
+            const targetY = pivotY + vecY;
+            this.moveToTarget(targetX, targetY, duration);
+        }
+        else if (this.baseColor === 'orange') {
+            const dist = this.getEuclideanDistance(this.gridX, this.gridY, pacman.gridX, pacman.gridY);
+            if (dist > 8) {
+                this.moveToTarget(pacman.gridX, pacman.gridY, duration);
+            } else {
+                this.moveToTarget(0, NUM_ROWS - 1, duration);
+            }
+        }
+    }
+
+    // --- MOVEMENT HELPERS ---
 
     getEuclideanDistance(x1, y1, x2, y2) {
         const dx = Math.abs(x1 - x2);
@@ -142,7 +195,6 @@ export class Ghost {
     }
 
     moveTowardsHome(duration) {
-        // FIX: Target the INSIDE of the house (14, 14), not the door (14, 11)
         this.moveToTarget(14, 14, duration);
     }
 
@@ -188,16 +240,12 @@ export class Ghost {
             const nextY = this.gridY + dir.y;
 
             let type = CELL_TYPES.WALL;
-            // Bounds Check for Tunnel
             if (nextX < 0 || nextX >= NUM_COLS) {
                 type = CELL_TYPES.EMPTY;
             } else {
                 type = level1[nextY][nextX];
             }
 
-            // --- AI FIX: RESTRICTED ZONES ---
-            // If the ghost is ACTIVE (hunting) and NOT EATEN (returning),
-            // it treats the GHOST_HOUSE and DOOR as WALLS.
             if (this.state === 'ACTIVE' && !this.isEaten) {
                 if (type === CELL_TYPES.GHOST_HOUSE || type === CELL_TYPES.DOOR) {
                     type = CELL_TYPES.WALL;
@@ -216,12 +264,10 @@ export class Ghost {
                 if (dir === DIRECTIONS.NONE) return;
                 const nextX = this.gridX + dir.x;
                 const nextY = this.gridY + dir.y;
-
                 let type = (nextX < 0 || nextX >= NUM_COLS) ? CELL_TYPES.EMPTY : level1[nextY][nextX];
                 if (this.state === 'ACTIVE' && !this.isEaten) {
                     if (type === CELL_TYPES.GHOST_HOUSE || type === CELL_TYPES.DOOR) type = CELL_TYPES.WALL;
                 }
-
                 if (type !== CELL_TYPES.WALL) possibleMoves.push(dir);
             });
         }
@@ -231,10 +277,13 @@ export class Ghost {
     executeMove(dir, duration) {
         this.prevGridX = this.gridX;
         this.prevGridY = this.gridY;
-
         this.currentDir = dir;
         this.gridX += dir.x;
         this.gridY += dir.y;
+
+        // NEW: Look where you are going!
+        this.updateEyes(dir);
+
         this.x = (this.gridX + 0.5) * CELL_SIZE;
         this.y = (this.gridY + 0.5) * CELL_SIZE;
         this.group.transition().duration(duration).ease(d3.easeLinear).attr('transform', `translate(${this.x}, ${this.y})`);
