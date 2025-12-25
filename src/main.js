@@ -38,6 +38,17 @@ let scaredTimer = 0; // Counts down when a power pellet is eaten
 let currentDirection = { x: 0, y: 0, angle: 90 };
 const scoreSpan = document.getElementById('score-value');
 
+// Count total dots to win
+let totalDots = 0;
+level1.forEach(row => {
+    row.forEach(cell => {
+        if (cell === CELL_TYPES.DOT || cell === CELL_TYPES.POWER_PELLET) {
+            totalDots++;
+        }
+    });
+});
+console.log(`Total Dots to Eat: ${totalDots}`);
+
 // --- 3. Helper Functions ---
 
 /**
@@ -50,16 +61,15 @@ function handleEat(gridX, gridY) {
         // Update Data
         level1[gridY][gridX] = CELL_TYPES.EMPTY;
 
-        // Update Visuals (Remove the circle)
+        // Update Visuals
         svg.selectAll('.cell')
             .filter(d => d.x === gridX && d.y === gridY)
             .select('circle')
             .remove();
 
-        // Scoring & Power Logic
+        // Scoring & Logic
         if (cellType === CELL_TYPES.POWER_PELLET) {
             score += 50;
-            // Activate Scared Mode
             scaredTimer = GAME_CONSTANTS.SCARED_DURATION;
             ghosts.forEach(g => g.setScared(true));
         } else {
@@ -67,6 +77,18 @@ function handleEat(gridX, gridY) {
         }
 
         scoreSpan.innerText = score;
+
+        // NEW: Win Condition Check
+        totalDots--;
+
+        if (totalDots === 0) {
+            timer.stop();
+            // Use setTimeout so the final dot disappears visually before the alert
+            setTimeout(() => {
+                alert(`YOU WIN! Perfect Score: ${score}`);
+                // Optional: location.reload(); // Reloads page to restart
+            }, 10);
+        }
     }
 }
 
