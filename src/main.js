@@ -4,6 +4,7 @@ import { Ghost } from './components/Ghost.js';
 import { level1 } from './data/level1.js';
 import { CELL_SIZE, CELL_TYPES, GAME_SPEED, GAME_CONSTANTS } from './constants.js';
 import { InputHandler } from './utils/Input.js';
+import { SoundManager } from './utils/SoundManager.js';
 
 // --- 1. Setup & Initialization ---
 const NUM_ROWS = level1.length;
@@ -17,21 +18,19 @@ const svg = d3.select('#game-container')
     .attr('height', HEIGHT)
     .style('background-color', 'black');
 
-// Render the Map
 drawGrid(svg, level1);
 
-// Spawn Actors (Updated for 28x31 Map)
 const pacman = new Pacman(svg, 14, 23);
 
-// Spawn Logic
 const ghosts = [
-    new Ghost(svg, 14, 11, 'red', 0),        // Blinky
-    new Ghost(svg, 14, 14, 'pink', 100),     // Pinky
-    new Ghost(svg, 12, 14, 'cyan', 300),     // Inky
-    new Ghost(svg, 16, 14, 'orange', 500)    // Clyde
+    new Ghost(svg, 14, 11, 'red', 0),
+    new Ghost(svg, 14, 14, 'pink', 100),
+    new Ghost(svg, 12, 14, 'cyan', 300),
+    new Ghost(svg, 16, 14, 'orange', 500)
 ];
 
 const input = new InputHandler();
+const sound = new SoundManager();
 
 // --- 2. Game State ---
 let score = 0;
@@ -42,19 +41,16 @@ let scaredTimer = 0;
 let currentDirection = { x: 0, y: 0, angle: 90 };
 let isPaused = false;
 
-// --- Scatter/Chase Wave State ---
 let gameMode = 'SCATTER';
 let modeClock = 0;
 
 const scoreSpan = document.getElementById('score-value');
 const livesSpan = document.getElementById('lives-value');
 
-// Restart Button
 document.getElementById('restart-btn').addEventListener('click', () => {
     window.location.reload();
 });
 
-// Count total dots to win
 let totalDots = 0;
 level1.forEach(row => {
     row.forEach(cell => {
@@ -67,8 +63,9 @@ console.log(`Total Dots to Eat: ${totalDots}`);
 
 // --- 3. Helper Functions ---
 
+// UPDATED: Now returns TRUE if we ate something, FALSE if empty
 function handleEat(gridX, gridY) {
-    if (gridY < 0 || gridY >= NUM_ROWS || gridX < 0 || gridX >= NUM_COLS) return;
+    if (gridY < 0 || gridY >= NUM_ROWS || gridX < 0 || gridX >= NUM_COLS) return false;
 
     const cellType = level1[gridY][gridX];
 
@@ -79,6 +76,8 @@ function handleEat(gridX, gridY) {
             .filter(d => d.x === gridX && d.y === gridY)
             .select('circle')
             .remove();
+
+        sound.play('waka'); // Play sound on eat
 
         if (cellType === CELL_TYPES.POWER_PELLET) {
             score += 50;
@@ -93,11 +92,14 @@ function handleEat(gridX, gridY) {
         totalDots--;
         if (totalDots === 0) {
             if (timer) timer.stop();
+            sound.stopAll();
             setTimeout(() => {
                 alert(`YOU WIN! Perfect Score: ${score}`);
             }, 10);
         }
+        return true; // Eaten!
     }
+    return false; // Nothing here
 }
 
 function handleLifeLost() {
@@ -106,38 +108,34 @@ function handleLifeLost() {
     isPaused = true;
     if (timer) timer.stop();
 
+    sound.stopAll();
+    sound.play('die');
+
     lives--;
     livesSpan.innerText = lives;
 
-    // 1. Hide Ghosts immediately (Authentic behavior)
     ghosts.forEach(g => g.group.attr('opacity', 0));
-
-    // 2. Trigger Death Animation
     pacman.die();
 
     if (lives === 0) {
         setTimeout(() => alert("Game Over! Final Score: " + score), 2000);
     } else {
         setTimeout(() => {
-            // 3. Reset Actors
             pacman.reset();
             ghosts.forEach(g => {
                 g.reset();
-                g.group.attr('opacity', 1); // Make ghosts visible again
+                g.group.attr('opacity', 1);
             });
 
-            // Reset States
             tick = 0;
             scaredTimer = 0;
             currentDirection = { x: 0, y: 0, angle: 90 };
-
-            // Reset Wave
             gameMode = 'SCATTER';
             modeClock = 0;
 
             isPaused = false;
             startGameLoop();
-        }, 2000); // Wait 2 seconds (animation is 1.5s)
+        }, 2000);
     }
 }
 
@@ -153,6 +151,7 @@ function checkCollision(ghost) {
             score += 200;
             scoreSpan.innerText = score;
             ghost.setEaten(true);
+            sound.play('eatGhost');
         } else if (!ghost.isScared && !ghost.isEaten) {
             handleLifeLost();
         }
@@ -163,28 +162,33 @@ function checkCollision(ghost) {
 function startGameLoop() {
     if (timer) timer.stop();
 
+    sound.startSiren();
+
     timer = d3.interval(() => {
         if (isPaused) return;
 
         tick++;
-        modeClock++; // Count time in current mode
+        modeClock++;
 
-        // --- WAVE TIMER LOGIC ---
-        // 7 Seconds Scatter (7000ms), 20 Seconds Chase (20000ms)
+        // Audio State
+        if (scaredTimer > 0) {
+            sound.startScared();
+        } else {
+            sound.startSiren();
+        }
+
+        // Wave Timer
         const scatterTicks = 7000 / GAME_SPEED;
         const chaseTicks = 20000 / GAME_SPEED;
 
         if (gameMode === 'SCATTER' && modeClock > scatterTicks) {
             gameMode = 'CHASE';
             modeClock = 0;
-            console.log("Switching to CHASE Mode");
         } else if (gameMode === 'CHASE' && modeClock > chaseTicks) {
             gameMode = 'SCATTER';
             modeClock = 0;
-            console.log("Switching to SCATTER Mode");
         }
 
-        // A. Manage Scared Mode
         if (scaredTimer > 0) {
             scaredTimer--;
             if (scaredTimer <= GAME_CONSTANTS.FLASH_THRESHOLD && (scaredTimer % 10 === 0)) {
@@ -195,9 +199,8 @@ function startGameLoop() {
             }
         }
 
-        // B. Pac-Man Logic (Every 4 ticks)
+        // Pac-Man Logic
         if (tick % 4 === 0) {
-
             if (pacman.gridX < 0) {
                 pacman.gridX = NUM_COLS - 1;
                 pacman.x = (pacman.gridX + 0.5) * CELL_SIZE;
@@ -210,7 +213,6 @@ function startGameLoop() {
             }
 
             const nextDirection = input.getDirection();
-
             let nextX = pacman.gridX + nextDirection.x;
             let nextY = pacman.gridY + nextDirection.y;
 
@@ -222,18 +224,23 @@ function startGameLoop() {
             } else {
                 nextX = pacman.gridX + currentDirection.x;
                 nextY = pacman.gridY + currentDirection.y;
-
                 isTunnel = (nextY === 14 && (nextX < 0 || nextX >= NUM_COLS));
                 nextCell = !isTunnel ? level1[nextY][nextX] : CELL_TYPES.EMPTY;
             }
 
             if (isTunnel || (nextCell !== CELL_TYPES.WALL && nextCell !== CELL_TYPES.GHOST_HOUSE)) {
                 pacman.move(nextX, nextY, currentDirection.angle, 4 * GAME_SPEED);
-                handleEat(nextX, nextY);
+
+                // --- NEW: Check if we ate something ---
+                const didEat = handleEat(nextX, nextY);
+                if (!didEat) {
+                    // If we moved but didn't eat, silence the waka
+                    sound.stop('waka');
+                }
             }
         }
 
-        // C. Ghost Logic
+        // Ghost Logic
         ghosts.forEach(ghost => {
             if (isPaused) return;
 
@@ -287,7 +294,6 @@ function startGameLoop() {
             }
         });
 
-        // D. Global Collision
         ghosts.forEach(ghost => {
             if (ghost.state === 'ACTIVE') {
                 checkCollision(ghost);
@@ -297,5 +303,4 @@ function startGameLoop() {
     }, GAME_SPEED);
 }
 
-// START THE GAME
 startGameLoop();

@@ -37,7 +37,7 @@ export const ACTORS = {
 };
 
 // --- Game Settings ---
-export const GAME_SPEED = 150; // Milliseconds per tick (lower is faster)
+export const GAME_SPEED = 40; // Milliseconds per tick (lower is faster)
 
 // --- Directions ---
 // We map these to angles for rotation: 0=Up, 90=Right, 180=Down, 270=Left
