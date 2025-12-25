@@ -24,6 +24,7 @@ const input = new InputHandler(); // Initialize Input
 
 // State
 let score = 0;
+let currentDirection = { x: 0, y: 0, angle: 90 };
 const scoreSpan = document.getElementById('score-value');
 
 // --- Helper Function: Handle Eating ---
@@ -50,17 +51,29 @@ function handleEat(gridX, gridY) {
 
 // --- The Game Loop ---
 const timer = d3.interval(() => {
-    const direction = input.getDirection();
+    // 1. Get the User's Desired Direction
+    const nextDirection = input.getDirection();
 
-    const nextX = pacman.gridX + direction.x;
-    const nextY = pacman.gridY + direction.y;
-
-    const nextCell = level1[nextY][nextX];
+    // 2. CHECK: Can we move in the Desired Direction?
+    let nextX = pacman.gridX + nextDirection.x;
+    let nextY = pacman.gridY + nextDirection.y;
+    let nextCell = level1[nextY][nextX];
 
     if (nextCell !== CELL_TYPES.WALL && nextCell !== CELL_TYPES.GHOST_HOUSE) {
-        pacman.move(nextX, nextY, direction.angle);
+        // YES: Update our "Current" direction to match the new input
+        currentDirection = nextDirection;
+    } else {
+        // NO: The user hit a wall. Ignore them.
+        // Recalculate based on the OLD Current Direction
+        nextX = pacman.gridX + currentDirection.x;
+        nextY = pacman.gridY + currentDirection.y;
+        nextCell = level1[nextY][nextX];
+    }
 
-        // NEW: Check for food after moving
+    // 3. EXECUTE: Move (if the valid direction—New or Old—is clear)
+    if (nextCell !== CELL_TYPES.WALL && nextCell !== CELL_TYPES.GHOST_HOUSE) {
+        pacman.move(nextX, nextY, currentDirection.angle);
         handleEat(nextX, nextY);
     }
+
 }, GAME_SPEED);
