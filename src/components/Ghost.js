@@ -50,37 +50,24 @@ export class Ghost {
         this.bodyParts.append('rect').attr('x', -(CELL_SIZE * 0.4)).attr('y', -2)
             .attr('width', CELL_SIZE * 0.8).attr('height', CELL_SIZE * 0.45).attr('fill', this.currentColor);
 
-        // --- EYES RENDERING (Refactored for Movement) ---
+        // --- EYES RENDERING ---
         this.eyesGroup = this.group.append('g').attr('class', 'eyes');
 
-        // Whites (Static bases)
-        // Left White (-4, -4), Right White (4, -4)
         this.eyesGroup.append('circle').attr('cx', -4).attr('cy', -4).attr('r', 3).attr('fill', 'white');
         this.eyesGroup.append('circle').attr('cx', 4).attr('cy', -4).attr('r', 3).attr('fill', 'white');
 
-        // Pupils (Dynamic - Saved to properties)
-        // Default looking RIGHT (Offset +2)
         this.pupilLeft = this.eyesGroup.append('circle').attr('cx', -2).attr('cy', -4).attr('r', 1.5).attr('fill', 'blue');
         this.pupilRight = this.eyesGroup.append('circle').attr('cx', 6).attr('cy', -4).attr('r', 1.5).attr('fill', 'blue');
     }
 
     // --- ACTIONS ---
 
-    // NEW: Updates pupil position based on direction
     updateEyes(dir) {
         if (!this.pupilLeft || !this.pupilRight) return;
-
-        // The Offset: Move 2 pixels in the direction of travel
         const offsetX = dir.x * 2;
         const offsetY = dir.y * 2;
-
-        // Base Positions (Where the center of the eye white is)
-        const baseLeftX = -4;
-        const baseRightX = 4;
-        const baseY = -4;
-
-        this.pupilLeft.attr('cx', baseLeftX + offsetX).attr('cy', baseY + offsetY);
-        this.pupilRight.attr('cx', baseRightX + offsetX).attr('cy', baseY + offsetY);
+        this.pupilLeft.attr('cx', -4 + offsetX).attr('cy', -4 + offsetY);
+        this.pupilRight.attr('cx', 4 + offsetX).attr('cy', -4 + offsetY);
     }
 
     bounce(tick) {
@@ -101,6 +88,36 @@ export class Ghost {
     revive() {
         this.setEaten(false);
         this.state = 'EXITING';
+    }
+
+    // --- NEW: Reset for Lives System ---
+    reset() {
+        // 1. Reset Position Data
+        this.gridX = this.startGridX;
+        this.gridY = this.startGridY;
+        this.prevGridX = this.startGridX;
+        this.prevGridY = this.startGridY;
+
+        // 2. Reset State
+        this.state = (this.releaseTick > 0) ? 'AT_HOME' : 'ACTIVE';
+        this.isScared = false;
+        this.isEaten = false;
+        this.currentDir = DIRECTIONS.RIGHT;
+        this.updateColor(this.baseColor);
+
+        // 3. Reset Pixels
+        this.x = (this.gridX + 0.5) * CELL_SIZE;
+        this.y = (this.gridY + 0.5) * CELL_SIZE;
+
+        // 4. Interrupt transition and snap
+        this.group.interrupt()
+            .attr('transform', `translate(${this.x}, ${this.y})`);
+
+        // Reset Eyes
+        this.updateEyes(this.currentDir);
+
+        // Reset Body Opacity (in case they were eaten)
+        this.bodyParts.attr('opacity', 1);
     }
 
     // --- STATES & MOVEMENT ---
@@ -280,10 +297,7 @@ export class Ghost {
         this.currentDir = dir;
         this.gridX += dir.x;
         this.gridY += dir.y;
-
-        // NEW: Look where you are going!
         this.updateEyes(dir);
-
         this.x = (this.gridX + 0.5) * CELL_SIZE;
         this.y = (this.gridY + 0.5) * CELL_SIZE;
         this.group.transition().duration(duration).ease(d3.easeLinear).attr('transform', `translate(${this.x}, ${this.y})`);

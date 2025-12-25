@@ -21,15 +21,9 @@ const svg = d3.select('#game-container')
 drawGrid(svg, level1);
 
 // Spawn Actors (Updated for 28x31 Map)
-// Pacman starts at (14, 23)
 const pacman = new Pacman(svg, 14, 23);
 
 // Spawn Logic
-// House Area: Rows 13-15, Cols 10-17. Door at (13, 12) & (14, 12).
-// Blinky: (14, 11) - Outside
-// Pinky: (14, 14) - Center
-// Inky: (12, 14) - Left
-// Clyde: (16, 14) - Right
 const ghosts = [
     new Ghost(svg, 14, 11, 'red', 0),        // Blinky
     new Ghost(svg, 14, 14, 'pink', 100),     // Pinky
@@ -41,10 +35,15 @@ const input = new InputHandler();
 
 // --- 2. Game State ---
 let score = 0;
+let lives = 3;
 let tick = 0;
+let timer = null;
 let scaredTimer = 0;
 let currentDirection = { x: 0, y: 0, angle: 90 };
+let isPaused = false; // NEW: Prevents double-death triggers
+
 const scoreSpan = document.getElementById('score-value');
+const livesSpan = document.getElementById('lives-value');
 
 // Count total dots to win
 let totalDots = 0;
@@ -60,7 +59,6 @@ console.log(`Total Dots to Eat: ${totalDots}`);
 // --- 3. Helper Functions ---
 
 function handleEat(gridX, gridY) {
-    // Boundary check for tunnel eating
     if (gridY < 0 || gridY >= NUM_ROWS || gridX < 0 || gridX >= NUM_COLS) return;
 
     const cellType = level1[gridY][gridX];
@@ -85,7 +83,7 @@ function handleEat(gridX, gridY) {
 
         totalDots--;
         if (totalDots === 0) {
-            timer.stop();
+            if (timer) timer.stop();
             setTimeout(() => {
                 alert(`YOU WIN! Perfect Score: ${score}`);
             }, 10);
@@ -93,7 +91,42 @@ function handleEat(gridX, gridY) {
     }
 }
 
+// NEW: Handle Life Loss Sequence
+function handleLifeLost() {
+    // FIX: If already paused/dying, ignore subsequent triggers
+    if (isPaused) return;
+
+    isPaused = true; // Lock the game state immediately
+    if (timer) timer.stop();
+
+    lives--;
+    livesSpan.innerText = lives;
+
+    if (lives === 0) {
+        setTimeout(() => alert("Game Over! Final Score: " + score), 100);
+    } else {
+        // Soft Reset
+        setTimeout(() => {
+            // 1. Reset Actors
+            pacman.reset();
+            ghosts.forEach(g => g.reset());
+
+            // 2. Reset Loop State
+            tick = 0;
+            scaredTimer = 0;
+            currentDirection = { x: 0, y: 0, angle: 90 };
+
+            // 3. Unlock and Restart
+            isPaused = false;
+            startGameLoop();
+        }, 2000);
+    }
+}
+
 function checkCollision(ghost) {
+    // FIX: Don't check collision if we are already in the death sequence
+    if (isPaused) return;
+
     const overlap = (ghost.gridX === pacman.gridX && ghost.gridY === pacman.gridY);
     const swap = (ghost.gridX === pacman.prevGridX && ghost.gridY === pacman.prevGridY &&
         ghost.prevGridX === pacman.gridX && ghost.prevGridY === pacman.gridY);
@@ -104,137 +137,142 @@ function checkCollision(ghost) {
             scoreSpan.innerText = score;
             ghost.setEaten(true);
         } else if (!ghost.isScared && !ghost.isEaten) {
-            timer.stop();
-            setTimeout(() => alert("Game Over! Final Score: " + score), 10);
+            handleLifeLost();
         }
     }
 }
 
-// --- Game Loop ---
-const timer = d3.interval(() => {
-    tick++;
+// --- 4. Game Loop ---
+function startGameLoop() {
+    // Safety: ensure no old timers are running
+    if (timer) timer.stop();
 
-    // A. Manage Scared Mode
-    if (scaredTimer > 0) {
-        scaredTimer--;
-        if (scaredTimer <= GAME_CONSTANTS.FLASH_THRESHOLD && (scaredTimer % 10 === 0)) {
-            ghosts.forEach(g => g.toggleFlash());
-        }
-        if (scaredTimer === 0) {
-            ghosts.forEach(g => g.setScared(false));
-        }
-    }
+    timer = d3.interval(() => {
+        // Double check pause state at start of tick
+        if (isPaused) return;
 
-    // B. Pac-Man Logic (Every 4 ticks)
-    if (tick % 4 === 0) {
+        tick++;
 
-        // --- WRAPPING LOGIC (The Tunnel) ---
-        if (pacman.gridX < 0) {
-            pacman.gridX = NUM_COLS - 1;
-            pacman.x = (pacman.gridX + 0.5) * CELL_SIZE;
-            pacman.group.interrupt().attr('transform', `translate(${pacman.x}, ${pacman.y}) rotate(${pacman.rotation})`);
-        }
-        else if (pacman.gridX >= NUM_COLS) {
-            pacman.gridX = 0;
-            pacman.x = (pacman.gridX + 0.5) * CELL_SIZE;
-            pacman.group.interrupt().attr('transform', `translate(${pacman.x}, ${pacman.y}) rotate(${pacman.rotation})`);
-        }
-
-        const nextDirection = input.getDirection();
-
-        let nextX = pacman.gridX + nextDirection.x;
-        let nextY = pacman.gridY + nextDirection.y;
-
-        let isTunnel = (nextY === 14 && (nextX < 0 || nextX >= NUM_COLS));
-        let nextCell = !isTunnel ? level1[nextY][nextX] : CELL_TYPES.EMPTY;
-
-        // 1. Try to turn
-        if (isTunnel || (nextCell !== CELL_TYPES.WALL && nextCell !== CELL_TYPES.GHOST_HOUSE)) {
-            currentDirection = nextDirection;
-        } else {
-            // 2. If turn failed, keep going straight
-            nextX = pacman.gridX + currentDirection.x;
-            nextY = pacman.gridY + currentDirection.y;
-
-            isTunnel = (nextY === 14 && (nextX < 0 || nextX >= NUM_COLS));
-            nextCell = !isTunnel ? level1[nextY][nextX] : CELL_TYPES.EMPTY;
-        }
-
-        // 3. Move if valid
-        if (isTunnel || (nextCell !== CELL_TYPES.WALL && nextCell !== CELL_TYPES.GHOST_HOUSE)) {
-            pacman.move(nextX, nextY, currentDirection.angle, 4 * GAME_SPEED);
-            handleEat(nextX, nextY);
-        }
-    }
-
-    // C. Ghost Logic
-    ghosts.forEach(ghost => {
-
-        // 1. AT HOME
-        if (ghost.state === 'AT_HOME') {
-            ghost.bounce(tick);
-            if (tick >= ghost.releaseTick) {
-                ghost.startExit();
+        // A. Manage Scared Mode
+        if (scaredTimer > 0) {
+            scaredTimer--;
+            if (scaredTimer <= GAME_CONSTANTS.FLASH_THRESHOLD && (scaredTimer % 10 === 0)) {
+                ghosts.forEach(g => g.toggleFlash());
             }
-            return;
-        }
-
-        // 2. EXITING
-        if (ghost.state === 'EXITING') {
-            if (tick % 5 === 0) {
-                ghost.moveExiting(5 * GAME_SPEED);
+            if (scaredTimer === 0) {
+                ghosts.forEach(g => g.setScared(false));
             }
-            return;
         }
 
-        // 3. ACTIVE
-        let moveRate = 5;
-        if (ghost.isEaten) moveRate = 2;
-        else if (ghost.isScared) moveRate = 8;
+        // B. Pac-Man Logic (Every 4 ticks)
+        if (tick % 4 === 0) {
 
-        if (tick % moveRate === 0) {
-            const duration = moveRate * GAME_SPEED;
-
-            // --- GHOST WRAPPING LOGIC ---
-            if (ghost.gridX < 0) {
-                ghost.gridX = NUM_COLS - 1;
-                ghost.x = (ghost.gridX + 0.5) * CELL_SIZE;
-                ghost.group.interrupt().attr('transform', `translate(${ghost.x}, ${ghost.y})`);
-            } else if (ghost.gridX >= NUM_COLS) {
-                ghost.gridX = 0;
-                ghost.x = (ghost.gridX + 0.5) * CELL_SIZE;
-                ghost.group.interrupt().attr('transform', `translate(${ghost.x}, ${ghost.y})`);
+            // --- WRAPPING LOGIC ---
+            if (pacman.gridX < 0) {
+                pacman.gridX = NUM_COLS - 1;
+                pacman.x = (pacman.gridX + 0.5) * CELL_SIZE;
+                pacman.group.interrupt().attr('transform', `translate(${pacman.x}, ${pacman.y}) rotate(${pacman.rotation})`);
+            }
+            else if (pacman.gridX >= NUM_COLS) {
+                pacman.gridX = 0;
+                pacman.x = (pacman.gridX + 0.5) * CELL_SIZE;
+                pacman.group.interrupt().attr('transform', `translate(${pacman.x}, ${pacman.y}) rotate(${pacman.rotation})`);
             }
 
-            if (ghost.isEaten) {
-                ghost.moveTowardsHome(duration);
-                // REVIVAL CHECK: Target Center of House (14, 14)
-                if (Math.abs(ghost.gridX - 14) <= 1 && Math.abs(ghost.gridY - 14) <= 1) {
-                    ghost.revive();
+            const nextDirection = input.getDirection();
+
+            let nextX = pacman.gridX + nextDirection.x;
+            let nextY = pacman.gridY + nextDirection.y;
+
+            let isTunnel = (nextY === 14 && (nextX < 0 || nextX >= NUM_COLS));
+            let nextCell = !isTunnel ? level1[nextY][nextX] : CELL_TYPES.EMPTY;
+
+            // 1. Try to turn
+            if (isTunnel || (nextCell !== CELL_TYPES.WALL && nextCell !== CELL_TYPES.GHOST_HOUSE)) {
+                currentDirection = nextDirection;
+            } else {
+                // 2. If turn failed, keep going straight
+                nextX = pacman.gridX + currentDirection.x;
+                nextY = pacman.gridY + currentDirection.y;
+
+                isTunnel = (nextY === 14 && (nextX < 0 || nextX >= NUM_COLS));
+                nextCell = !isTunnel ? level1[nextY][nextX] : CELL_TYPES.EMPTY;
+            }
+
+            // 3. Move if valid
+            if (isTunnel || (nextCell !== CELL_TYPES.WALL && nextCell !== CELL_TYPES.GHOST_HOUSE)) {
+                pacman.move(nextX, nextY, currentDirection.angle, 4 * GAME_SPEED);
+                handleEat(nextX, nextY);
+            }
+        }
+
+        // C. Ghost Logic
+        ghosts.forEach(ghost => {
+            if (isPaused) return; // Stop processing ghosts if we died mid-loop
+
+            // 1. AT HOME
+            if (ghost.state === 'AT_HOME') {
+                ghost.bounce(tick);
+                if (tick >= ghost.releaseTick) {
+                    ghost.startExit();
                 }
-            }
-            else if (ghost.isScared) {
-                ghost.moveAwayFrom(pacman.gridX, pacman.gridY, duration);
-            }
-            else {
-                // --- NEW: PERSONALITY AI ---
-                // We attach current direction to Pacman so Pinky/Inky can predict
-                pacman.currentDir = currentDirection;
-
-                // processAI(pacman, blinky, duration)
-                // ghosts[0] is Blinky
-                ghost.processAI(pacman, ghosts[0], duration);
+                return;
             }
 
-            checkCollision(ghost);
-        }
-    });
+            // 2. EXITING
+            if (ghost.state === 'EXITING') {
+                if (tick % 5 === 0) {
+                    ghost.moveExiting(5 * GAME_SPEED);
+                }
+                return;
+            }
 
-    // D. Global Collision
-    ghosts.forEach(ghost => {
-        if (ghost.state === 'ACTIVE') {
-            checkCollision(ghost);
-        }
-    });
+            // 3. ACTIVE
+            let moveRate = 5;
+            if (ghost.isEaten) moveRate = 2;
+            else if (ghost.isScared) moveRate = 8;
 
-}, GAME_SPEED);
+            if (tick % moveRate === 0) {
+                const duration = moveRate * GAME_SPEED;
+
+                // --- GHOST WRAPPING ---
+                if (ghost.gridX < 0) {
+                    ghost.gridX = NUM_COLS - 1;
+                    ghost.x = (ghost.gridX + 0.5) * CELL_SIZE;
+                    ghost.group.interrupt().attr('transform', `translate(${ghost.x}, ${ghost.y})`);
+                } else if (ghost.gridX >= NUM_COLS) {
+                    ghost.gridX = 0;
+                    ghost.x = (ghost.gridX + 0.5) * CELL_SIZE;
+                    ghost.group.interrupt().attr('transform', `translate(${ghost.x}, ${ghost.y})`);
+                }
+
+                if (ghost.isEaten) {
+                    ghost.moveTowardsHome(duration);
+                    if (Math.abs(ghost.gridX - 14) <= 1 && Math.abs(ghost.gridY - 14) <= 1) {
+                        ghost.revive();
+                    }
+                }
+                else if (ghost.isScared) {
+                    ghost.moveAwayFrom(pacman.gridX, pacman.gridY, duration);
+                }
+                else {
+                    pacman.currentDir = currentDirection;
+                    ghost.processAI(pacman, ghosts[0], duration);
+                }
+
+                checkCollision(ghost);
+            }
+        });
+
+        // D. Global Collision
+        ghosts.forEach(ghost => {
+            if (ghost.state === 'ACTIVE') {
+                checkCollision(ghost);
+            }
+        });
+
+    }, GAME_SPEED);
+}
+
+// START THE GAME
+startGameLoop();
